@@ -20,11 +20,25 @@ To update |kitty|, :doc:`follow the instructions <binary>`.
 - macOS: Allow opening new kitty tabs/top-level windows from Finder
   (:pull:`1350`)
 
+- Add an option :opt:`disable_ligatures_under_cursor` to disable
+  multi-character ligatures under the cursor to make editing easier
+  (:iss:`461`)
+
+- Allow creating new OS windows in session files (:iss:`1514`)
+
+- Allow setting OS window size in session files
+
+- Add an option :opt:`tab_switch_strategy` to control which
+  tab becomes active when the current tab is closed (:pull:`1524`)
+
 - Allow specifying a value of ``none`` for the :opt:`selection_foreground`
   which will cause kitty to not change text color in selections (:iss:`1358`)
 
 - Make live resizing of OS windows smoother and show the size in cells
   while the resize is in progress.
+
+- When a window is closed, switch focus to the previously active window (if
+  any) instead of picking the previous window in the layout (:iss:`1450`)
 
 - icat kitten: Add support for displaying images at http(s) URLs (:iss:`1340`)
 
@@ -83,6 +97,16 @@ To update |kitty|, :doc:`follow the instructions <binary>`.
 
 - macOS: Fix specifying initial window size in cells not working correctly on
   Retina screens (:iss:`1444`)
+
+- Fix a regression in version 0.13.0 that caused background colors of space
+  characters after private use unicode characters to not be respected
+  (:iss:`1455`)
+
+- Only update the selected text to clipboard when the selection is finished,
+  not continuously as it is updated. (:iss:`1460`)
+
+- Allow setting :opt:`active_border_color` to ``none`` to not draw a border
+  around the active window (:iss:`805`)
 
 
 0.13.3 [2019-01-19]

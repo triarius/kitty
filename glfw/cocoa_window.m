@@ -32,29 +32,6 @@
 // Needed for _NSGetProgname
 #include <crt_externs.h>
 
-// HACK: The 10.12 SDK adds new symbols and immediately deprecates the old ones
-#if MAC_OS_X_VERSION_MAX_ALLOWED < 101200
- #define NSWindowStyleMaskBorderless NSBorderlessWindowMask
- #define NSWindowStyleMaskClosable NSClosableWindowMask
- #define NSWindowStyleMaskMiniaturizable NSMiniaturizableWindowMask
- #define NSWindowStyleMaskResizable NSResizableWindowMask
- #define NSWindowStyleMaskTitled NSTitledWindowMask
- #define NSEventModifierFlagCommand NSCommandKeyMask
- #define NSEventModifierFlagControl NSControlKeyMask
- #define NSEventModifierFlagOption NSAlternateKeyMask
- #define NSEventModifierFlagShift NSShiftKeyMask
- #define NSEventModifierFlagCapsLock NSAlphaShiftKeyMask
- #define NSEventModifierFlagDeviceIndependentFlagsMask NSDeviceIndependentModifierFlagsMask
- #define NSEventMaskAny NSAnyEventMask
- #define NSEventTypeApplicationDefined NSApplicationDefined
-#endif
-
-#if (MAC_OS_X_VERSION_MAX_ALLOWED < 101400)
- #define NSPasteboardTypeFileURL NSFilenamesPboardType
- #define NSBitmapFormatAlphaNonpremultiplied NSAlphaNonpremultipliedBitmapFormat
- #define NSPasteboardTypeString NSStringPboardType
-#endif
-
 // Returns the style mask corresponding to the window settings
 //
 static NSUInteger getStyleMask(_GLFWwindow* window)
@@ -615,14 +592,6 @@ static GLFWapplicationshouldhandlereopenfun handle_reopen_callback = NULL;
     _glfwInputWindowDamage(window);
 }
 
-- (id)makeBackingLayer
-{
-    if (window->ns.layer)
-        return window->ns.layer;
-
-    return [super makeBackingLayer];
-}
-
 - (void)cursorUpdate:(NSEvent *)event
 {
     updateCursorImage(window);
@@ -751,7 +720,7 @@ static GLFWapplicationshouldhandlereopenfun handle_reopen_callback = NULL;
         window->ns.yscale = yscale;
         _glfwInputWindowContentScale(window, xscale, yscale);
 
-        if (window->ns.layer)
+        if (window->ns.retina && window->ns.layer)
             [window->ns.layer setContentsScale:[window->ns.object backingScaleFactor]];
     }
 }
@@ -1308,8 +1277,7 @@ static GLFWbool createNativeWindow(_GLFWwindow* window,
 
     window->ns.view = [[GLFWContentView alloc] initWithGlfwWindow:window];
 
-    if (wndconfig->ns.retina)
-        [window->ns.view setWantsBestResolutionOpenGLSurface:YES];
+    window->ns.retina = wndconfig->ns.retina;
 
     if (fbconfig->transparent)
     {
@@ -1741,7 +1709,7 @@ void _glfwPlatformSetWindowOpacity(_GLFWwindow* window, float opacity)
     [window->ns.object setAlphaValue:opacity];
 }
 
-static inline CGDirectDisplayID displayIDForWindow(_GLFWwindow *w) {
+CGDirectDisplayID displayIDForWindow(_GLFWwindow *w) {
     NSWindow *nw = w->ns.object;
     NSDictionary *dict = [nw.screen deviceDescription];
     NSNumber *displayIDns = [dict objectForKey:@"NSScreenNumber"];
@@ -1750,31 +1718,14 @@ static inline CGDirectDisplayID displayIDForWindow(_GLFWwindow *w) {
 }
 
 void
-dispatchCustomEvent(NSEvent *event) {
-    switch(event.subtype) {
-        case RENDER_FRAME_REQUEST_EVENT_TYPE:
-            {
-                CGDirectDisplayID displayID = (CGDirectDisplayID)event.data1;
-                _GLFWwindow *w = _glfw.windowListHead;
-                while (w) {
-                    if (w->ns.renderFrameRequested && displayID == displayIDForWindow(w)) {
-                        w->ns.renderFrameRequested = GLFW_FALSE;
-                        w->ns.renderFrameCallback((GLFWwindow*)w);
-                    }
-                    w = w->next;
-                }
-            }
-            break;
-
-        case EMPTY_EVENT_TYPE:
-            break;
-
-        case TICK_CALLBACK_EVENT_TYPE:
-            _glfwDispatchTickCallback();
-            break;
-
-        default:
-            break;
+_glfwDispatchRenderFrame(CGDirectDisplayID displayID) {
+    _GLFWwindow *w = _glfw.windowListHead;
+    while (w) {
+        if (w->ns.renderFrameRequested && displayID == displayIDForWindow(w)) {
+            w->ns.renderFrameRequested = GLFW_FALSE;
+            w->ns.renderFrameCallback((GLFWwindow*)w);
+        }
+        w = w->next;
     }
 }
 
@@ -1940,21 +1891,26 @@ int _glfwPlatformCreateCursor(_GLFWcursor* cursor,
     return GLFW_TRUE;
 }
 
-int _glfwPlatformCreateStandardCursor(_GLFWcursor* cursor, int shape)
+int _glfwPlatformCreateStandardCursor(_GLFWcursor* cursor, GLFWCursorShape shape)
 {
-
-    if (shape == GLFW_ARROW_CURSOR)
-        cursor->ns.object = [NSCursor arrowCursor];
-    else if (shape == GLFW_IBEAM_CURSOR)
-        cursor->ns.object = [NSCursor IBeamCursor];
-    else if (shape == GLFW_CROSSHAIR_CURSOR)
-        cursor->ns.object = [NSCursor crosshairCursor];
-    else if (shape == GLFW_HAND_CURSOR)
-        cursor->ns.object = [NSCursor pointingHandCursor];
-    else if (shape == GLFW_HRESIZE_CURSOR)
-        cursor->ns.object = [NSCursor resizeLeftRightCursor];
-    else if (shape == GLFW_VRESIZE_CURSOR)
-        cursor->ns.object = [NSCursor resizeUpDownCursor];
+#define C(name, val) case name: cursor->ns.object = [NSCursor val]; break;
+#define U(name, val) case name: cursor->ns.object = [[NSCursor class] performSelector:@selector(val)]; break;
+    switch(shape) {
+        C(GLFW_ARROW_CURSOR, arrowCursor);
+        C(GLFW_IBEAM_CURSOR, IBeamCursor);
+        C(GLFW_CROSSHAIR_CURSOR, crosshairCursor);
+        C(GLFW_HAND_CURSOR, pointingHandCursor);
+        C(GLFW_HRESIZE_CURSOR, resizeLeftRightCursor);
+        C(GLFW_VRESIZE_CURSOR, resizeUpDownCursor);
+        U(GLFW_NW_RESIZE_CURSOR, _windowResizeNorthWestSouthEastCursor);
+        U(GLFW_NE_RESIZE_CURSOR, _windowResizeNorthEastSouthWestCursor);
+        U(GLFW_SW_RESIZE_CURSOR, _windowResizeNorthEastSouthWestCursor);
+        U(GLFW_SE_RESIZE_CURSOR, _windowResizeNorthWestSouthEastCursor);
+        case GLFW_INVALID_CURSOR:
+            return GLFW_FALSE;
+    }
+#undef C
+#undef U
 
     if (!cursor->ns.object)
     {
@@ -2066,7 +2022,9 @@ VkResult _glfwPlatformCreateWindowSurface(VkInstance instance,
         return VK_ERROR_EXTENSION_NOT_PRESENT;
     }
 
-    [window->ns.layer setContentsScale:[window->ns.object backingScaleFactor]];
+    if (window->ns.retina)
+        [window->ns.layer setContentsScale:[window->ns.object backingScaleFactor]];
+    [window->ns.view setLayer:window->ns.layer];
     [window->ns.view setWantsLayer:YES];
 
     memset(&sci, 0, sizeof(sci));

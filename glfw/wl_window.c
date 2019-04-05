@@ -42,6 +42,89 @@
 #define URI_LIST_MIME "text/uri-list"
 
 
+static GLFWbool checkScaleChange(_GLFWwindow* window)
+{
+    int scale = 1;
+    int i;
+    int monitorScale;
+
+    // Check if we will be able to set the buffer scale or not.
+    if (_glfw.wl.compositorVersion < 3)
+        return GLFW_FALSE;
+
+    // Get the scale factor from the highest scale monitor.
+    for (i = 0; i < window->wl.monitorsCount; ++i)
+    {
+        monitorScale = window->wl.monitors[i]->wl.scale;
+        if (scale < monitorScale)
+            scale = monitorScale;
+    }
+
+    // Only change the framebuffer size if the scale changed.
+    if (scale != window->wl.scale)
+    {
+        window->wl.scale = scale;
+        wl_surface_set_buffer_scale(window->wl.surface, scale);
+        return GLFW_TRUE;
+    }
+    return GLFW_FALSE;
+}
+
+// Makes the surface considered as XRGB instead of ARGB.
+static void setOpaqueRegion(_GLFWwindow* window)
+{
+    struct wl_region* region;
+
+    region = wl_compositor_create_region(_glfw.wl.compositor);
+    if (!region)
+        return;
+
+    wl_region_add(region, 0, 0, window->wl.width, window->wl.height);
+    wl_surface_set_opaque_region(window->wl.surface, region);
+    wl_surface_commit(window->wl.surface);
+    wl_region_destroy(region);
+}
+
+
+static void resizeFramebuffer(_GLFWwindow* window)
+{
+    int scale = window->wl.scale;
+    int scaledWidth = window->wl.width * scale;
+    int scaledHeight = window->wl.height * scale;
+    wl_egl_window_resize(window->wl.native, scaledWidth, scaledHeight, 0, 0);
+    if (!window->wl.transparent)
+        setOpaqueRegion(window);
+    _glfwInputFramebufferSize(window, scaledWidth, scaledHeight);
+
+    if (!window->wl.decorations.top.surface)
+        return;
+
+    // Top decoration.
+    wp_viewport_set_destination(window->wl.decorations.top.viewport,
+                                window->wl.width, _GLFW_DECORATION_TOP);
+    wl_surface_commit(window->wl.decorations.top.surface);
+
+    // Left decoration.
+    wp_viewport_set_destination(window->wl.decorations.left.viewport,
+                                _GLFW_DECORATION_WIDTH, window->wl.height + _GLFW_DECORATION_TOP);
+    wl_surface_commit(window->wl.decorations.left.surface);
+
+    // Right decoration.
+    wl_subsurface_set_position(window->wl.decorations.right.subsurface,
+                               window->wl.width, -_GLFW_DECORATION_TOP);
+    wp_viewport_set_destination(window->wl.decorations.right.viewport,
+                                _GLFW_DECORATION_WIDTH, window->wl.height + _GLFW_DECORATION_TOP);
+    wl_surface_commit(window->wl.decorations.right.surface);
+
+    // Bottom decoration.
+    wl_subsurface_set_position(window->wl.decorations.bottom.subsurface,
+                               -_GLFW_DECORATION_WIDTH, window->wl.height);
+    wp_viewport_set_destination(window->wl.decorations.bottom.viewport,
+                                window->wl.width + _GLFW_DECORATION_HORIZONTAL, _GLFW_DECORATION_WIDTH);
+    wl_surface_commit(window->wl.decorations.bottom.surface);
+}
+
+
 static const char*
 clipboard_mime() {
     static char buf[128] = {0};
@@ -57,6 +140,28 @@ static void handlePing(void* data,
 {
     wl_shell_surface_pong(shellSurface, serial);
 }
+
+
+static void dispatchChangesAfterConfigure(_GLFWwindow *window, int32_t width, int32_t height) {
+    if (width <= 0) width = window->wl.width;
+    if (height <= 0) height = window->wl.height;
+    GLFWbool size_changed = width != window->wl.width || height != window->wl.height;
+    GLFWbool scale_changed = checkScaleChange(window);
+
+    if (size_changed) {
+        _glfwInputWindowSize(window, width, height);
+        _glfwPlatformSetWindowSize(window, width, height);
+    }
+
+    if (scale_changed) {
+        if (!size_changed)
+            resizeFramebuffer(window);
+        _glfwInputWindowContentScale(window, window->wl.scale, window->wl.scale);
+    }
+
+    _glfwInputWindowDamage(window);
+}
+
 
 static void handleConfigure(void* data,
                             struct wl_shell_surface* shellSurface,
@@ -101,9 +206,7 @@ static void handleConfigure(void* data,
             height = window->maxheight;
     }
 
-    _glfwInputWindowSize(window, width, height);
-    _glfwPlatformSetWindowSize(window, width, height);
-    _glfwInputWindowDamage(window);
+    dispatchChangesAfterConfigure(window, width, height);
 }
 
 static void handlePopupDone(void* data,
@@ -338,88 +441,6 @@ static const struct zxdg_toplevel_decoration_v1_listener xdgDecorationListener =
     xdgDecorationHandleConfigure,
 };
 
-// Makes the surface considered as XRGB instead of ARGB.
-static void setOpaqueRegion(_GLFWwindow* window)
-{
-    struct wl_region* region;
-
-    region = wl_compositor_create_region(_glfw.wl.compositor);
-    if (!region)
-        return;
-
-    wl_region_add(region, 0, 0, window->wl.width, window->wl.height);
-    wl_surface_set_opaque_region(window->wl.surface, region);
-    wl_surface_commit(window->wl.surface);
-    wl_region_destroy(region);
-}
-
-
-static void resizeWindow(_GLFWwindow* window)
-{
-    int scale = window->wl.scale;
-    int scaledWidth = window->wl.width * scale;
-    int scaledHeight = window->wl.height * scale;
-    wl_egl_window_resize(window->wl.native, scaledWidth, scaledHeight, 0, 0);
-    if (!window->wl.transparent)
-        setOpaqueRegion(window);
-    _glfwInputFramebufferSize(window, scaledWidth, scaledHeight);
-    _glfwInputWindowContentScale(window, scale, scale);
-
-    if (!window->wl.decorations.top.surface)
-        return;
-
-    // Top decoration.
-    wp_viewport_set_destination(window->wl.decorations.top.viewport,
-                                window->wl.width, _GLFW_DECORATION_TOP);
-    wl_surface_commit(window->wl.decorations.top.surface);
-
-    // Left decoration.
-    wp_viewport_set_destination(window->wl.decorations.left.viewport,
-                                _GLFW_DECORATION_WIDTH, window->wl.height + _GLFW_DECORATION_TOP);
-    wl_surface_commit(window->wl.decorations.left.surface);
-
-    // Right decoration.
-    wl_subsurface_set_position(window->wl.decorations.right.subsurface,
-                               window->wl.width, -_GLFW_DECORATION_TOP);
-    wp_viewport_set_destination(window->wl.decorations.right.viewport,
-                                _GLFW_DECORATION_WIDTH, window->wl.height + _GLFW_DECORATION_TOP);
-    wl_surface_commit(window->wl.decorations.right.surface);
-
-    // Bottom decoration.
-    wl_subsurface_set_position(window->wl.decorations.bottom.subsurface,
-                               -_GLFW_DECORATION_WIDTH, window->wl.height);
-    wp_viewport_set_destination(window->wl.decorations.bottom.viewport,
-                                window->wl.width + _GLFW_DECORATION_HORIZONTAL, _GLFW_DECORATION_WIDTH);
-    wl_surface_commit(window->wl.decorations.bottom.surface);
-}
-
-static void checkScaleChange(_GLFWwindow* window)
-{
-    int scale = 1;
-    int i;
-    int monitorScale;
-
-    // Check if we will be able to set the buffer scale or not.
-    if (_glfw.wl.compositorVersion < 3)
-        return;
-
-    // Get the scale factor from the highest scale monitor.
-    for (i = 0; i < window->wl.monitorsCount; ++i)
-    {
-        monitorScale = window->wl.monitors[i]->wl.scale;
-        if (scale < monitorScale)
-            scale = monitorScale;
-    }
-
-    // Only change the framebuffer size if the scale changed.
-    if (scale != window->wl.scale)
-    {
-        window->wl.scale = scale;
-        wl_surface_set_buffer_scale(window->wl.surface, scale);
-        resizeWindow(window);
-    }
-}
-
 static void handleEnter(void *data,
                         struct wl_surface *surface,
                         struct wl_output *output)
@@ -437,7 +458,10 @@ static void handleEnter(void *data,
 
     window->wl.monitors[window->wl.monitorsCount++] = monitor;
 
-    checkScaleChange(window);
+    if (checkScaleChange(window)) {
+        resizeFramebuffer(window);
+        _glfwInputWindowContentScale(window, window->wl.scale, window->wl.scale);
+    }
 }
 
 static void handleLeave(void *data,
@@ -458,7 +482,10 @@ static void handleLeave(void *data,
     }
     window->wl.monitors[--window->wl.monitorsCount] = NULL;
 
-    checkScaleChange(window);
+    if (checkScaleChange(window)) {
+        resizeFramebuffer(window);
+        _glfwInputWindowContentScale(window, window->wl.scale, window->wl.scale);
+    }
 }
 
 static const struct wl_surface_listener surfaceListener = {
@@ -627,11 +654,8 @@ static void xdgToplevelHandleConfigure(void* data,
                     width = height * targetRatio;
             }
         }
-
-        _glfwInputWindowSize(window, width, height);
-        _glfwPlatformSetWindowSize(window, width, height);
-        _glfwInputWindowDamage(window);
     }
+    dispatchChangesAfterConfigure(window, width, height);
 
     if (window->wl.wasFullScreen && window->autoIconify)
     {
@@ -815,27 +839,45 @@ animateCursorImage(id_type timer_id, void *data) {
     incrementCursorImage(_glfw.wl.pointerFocus);
 }
 
+static void
+abortOnFatalError(int last_error) {
+    _glfwInputError(GLFW_PLATFORM_ERROR, "Wayland: fatal display error: %s", strerror(last_error));
+    _GLFWwindow* window = _glfw.windowListHead;
+    while (window)
+    {
+        _glfwInputWindowCloseRequest(window);
+        window = window->next;
+    }
+}
 
 static void
 handleEvents(double timeout)
 {
     struct wl_display* display = _glfw.wl.display;
+    errno = 0;
 
     while (wl_display_prepare_read(display) != 0) {
-        wl_display_dispatch_pending(display);
+        while(1) {
+            errno = 0;
+            int num_dispatched = wl_display_dispatch_pending(display);
+            if (num_dispatched == 0) return;
+            if (num_dispatched < 0) {
+                if (errno == EAGAIN) continue;
+                int last_error = wl_display_get_error(display);
+                if (last_error) abortOnFatalError(last_error);
+                return;
+            }
+            break;
+        }
     }
 
     // If an error different from EAGAIN happens, we have likely been
     // disconnected from the Wayland session, try to handle that the best we
     // can.
+    errno = 0;
     if (wl_display_flush(display) < 0 && errno != EAGAIN)
     {
-        _GLFWwindow* window = _glfw.windowListHead;
-        while (window)
-        {
-            _glfwInputWindowCloseRequest(window);
-            window = window->next;
-        }
+        abortOnFatalError(errno);
         wl_display_cancel_read(display);
         return;
     }
@@ -853,26 +895,50 @@ handleEvents(double timeout)
     glfw_dbus_session_bus_dispatch();
 }
 
-// Translates a GLFW standard cursor to a theme cursor name
-//
-static char *translateCursorShape(int shape)
+static struct wl_cursor*
+try_cursor_names(int arg_count, ...) {
+    struct wl_cursor* ans = NULL;
+    va_list ap;
+    va_start(ap, arg_count);
+    for (int i = 0; i < arg_count && !ans; i++) {
+        const char *name = va_arg(ap, const char *);
+        ans = wl_cursor_theme_get_cursor(_glfw.wl.cursorTheme, name);
+    }
+    va_end(ap);
+    return ans;
+}
+
+struct wl_cursor* _glfwLoadCursor(GLFWCursorShape shape)
 {
+    static GLFWbool warnings[GLFW_INVALID_CURSOR] = {0};
+#define NUMARGS(...)  (sizeof((const char*[]){__VA_ARGS__})/sizeof(const char*))
+#define C(name, ...) case name: { \
+    ans = try_cursor_names(NUMARGS(__VA_ARGS__), __VA_ARGS__); \
+    if (!ans && !warnings[name]) {\
+        _glfwInputError(GLFW_PLATFORM_ERROR, "Wayland: Could not find standard cursor: %s", #name); \
+        warnings[name] = GLFW_TRUE; \
+    } \
+    break; }
+
+    struct wl_cursor* ans = NULL;
     switch (shape)
     {
-        case GLFW_ARROW_CURSOR:
-            return "left_ptr";
-        case GLFW_IBEAM_CURSOR:
-            return "xterm";
-        case GLFW_CROSSHAIR_CURSOR:
-            return "crosshair";
-        case GLFW_HAND_CURSOR:
-            return "grabbing";
-        case GLFW_HRESIZE_CURSOR:
-            return "sb_h_double_arrow";
-        case GLFW_VRESIZE_CURSOR:
-            return "sb_v_double_arrow";
+        C(GLFW_ARROW_CURSOR, "arrow", "left_ptr", "default")
+        C(GLFW_IBEAM_CURSOR, "xterm", "ibeam", "text")
+        C(GLFW_CROSSHAIR_CURSOR, "crosshair", "cross")
+        C(GLFW_HAND_CURSOR, "hand2", "grab", "grabbing", "closedhand")
+        C(GLFW_HRESIZE_CURSOR, "sb_h_double_arrow", "h_double_arrow", "col-resize")
+        C(GLFW_VRESIZE_CURSOR, "sb_v_double_arrow", "v_double_arrow", "row-resize")
+        C(GLFW_NW_RESIZE_CURSOR, "top_left_corner", "nw-resize")
+        C(GLFW_NE_RESIZE_CURSOR, "top_right_corner", "ne-resize")
+        C(GLFW_SW_RESIZE_CURSOR, "bottom_left_corner", "sw-resize")
+        C(GLFW_SE_RESIZE_CURSOR, "bottom_right_corner", "se-resize")
+        case GLFW_INVALID_CURSOR:
+            break;
     }
-    return NULL;
+    return ans;
+#undef NUMARGS
+#undef C
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -1035,9 +1101,11 @@ void _glfwPlatformGetWindowSize(_GLFWwindow* window, int* width, int* height)
 
 void _glfwPlatformSetWindowSize(_GLFWwindow* window, int width, int height)
 {
-    window->wl.width = width;
-    window->wl.height = height;
-    resizeWindow(window);
+    if (width != window->wl.width || height != window->wl.height) {
+        window->wl.width = width;
+        window->wl.height = height;
+        resizeFramebuffer(window);
+    }
 }
 
 void _glfwPlatformSetWindowSizeLimits(_GLFWwindow* window,
@@ -1379,20 +1447,12 @@ int _glfwPlatformCreateCursor(_GLFWcursor* cursor,
     return GLFW_TRUE;
 }
 
-int _glfwPlatformCreateStandardCursor(_GLFWcursor* cursor, int shape)
+int _glfwPlatformCreateStandardCursor(_GLFWcursor* cursor, GLFWCursorShape shape)
 {
     struct wl_cursor* standardCursor;
 
-    standardCursor = wl_cursor_theme_get_cursor(_glfw.wl.cursorTheme,
-                                                translateCursorShape(shape));
-    if (!standardCursor)
-    {
-        _glfwInputError(GLFW_PLATFORM_ERROR,
-                        "Wayland: Standard cursor \"%s\" not found",
-                        translateCursorShape(shape));
-        return GLFW_FALSE;
-    }
-
+    standardCursor = _glfwLoadCursor(shape);
+    if (!standardCursor) return GLFW_FALSE;
     cursor->wl.cursor = standardCursor;
     cursor->wl.currentImage = 0;
     return GLFW_TRUE;
@@ -1529,14 +1589,8 @@ void _glfwPlatformSetCursor(_GLFWwindow* window, _GLFWcursor* cursor)
             setCursorImage(&cursor->wl);
         else
         {
-            defaultCursor = wl_cursor_theme_get_cursor(_glfw.wl.cursorTheme,
-                                                       "left_ptr");
-            if (!defaultCursor)
-            {
-                _glfwInputError(GLFW_PLATFORM_ERROR,
-                                "Wayland: Standard cursor not found");
-                return;
-            }
+            defaultCursor = _glfwLoadCursor(GLFW_ARROW_CURSOR);
+            if (!defaultCursor) return;
             _GLFWcursorWayland cursorWayland = {
                 defaultCursor,
                 NULL,

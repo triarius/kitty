@@ -36,11 +36,30 @@ typedef void* id;
 typedef void* CVDisplayLinkRef;
 #endif
 
-typedef enum {
-    EMPTY_EVENT_TYPE,
-    RENDER_FRAME_REQUEST_EVENT_TYPE,
-    TICK_CALLBACK_EVENT_TYPE
-} EventTypes;
+#if MAC_OS_X_VERSION_MAX_ALLOWED < 101200
+ #define NSBitmapFormatAlphaNonpremultiplied NSAlphaNonpremultipliedBitmapFormat
+ #define NSEventMaskAny NSAnyEventMask
+ #define NSEventMaskKeyUp NSKeyUpMask
+ #define NSEventModifierFlagCapsLock NSAlphaShiftKeyMask
+ #define NSEventModifierFlagCommand NSCommandKeyMask
+ #define NSEventModifierFlagControl NSControlKeyMask
+ #define NSEventModifierFlagDeviceIndependentFlagsMask NSDeviceIndependentModifierFlagsMask
+ #define NSEventModifierFlagOption NSAlternateKeyMask
+ #define NSEventModifierFlagShift NSShiftKeyMask
+ #define NSEventTypeApplicationDefined NSApplicationDefined
+ #define NSWindowStyleMaskBorderless NSBorderlessWindowMask
+ #define NSWindowStyleMaskClosable NSClosableWindowMask
+ #define NSWindowStyleMaskMiniaturizable NSMiniaturizableWindowMask
+ #define NSWindowStyleMaskResizable NSResizableWindowMask
+ #define NSWindowStyleMaskTitled NSTitledWindowMask
+#endif
+
+#if (MAC_OS_X_VERSION_MAX_ALLOWED < 101400)
+ #define NSPasteboardTypeFileURL NSFilenamesPboardType
+ #define NSBitmapFormatAlphaNonpremultiplied NSAlphaNonpremultipliedBitmapFormat
+ #define NSPasteboardTypeString NSStringPboardType
+ #define NSOpenGLContextParameterSurfaceOpacity NSOpenGLCPSurfaceOpacity
+#endif
 
 
 typedef VkFlags VkMacOSSurfaceCreateFlagsMVK;
@@ -98,6 +117,7 @@ typedef struct _GLFWwindowNS
     id              layer;
 
     GLFWbool        maximized;
+    GLFWbool        retina;
 
     // Cached window properties to filter out duplicate events
     int             width, height;
@@ -206,3 +226,4 @@ float _glfwTransformYNS(float y);
 void _glfwClearDisplayLinks();
 void _glfwCocoaPostEmptyEvent(short subtype, long data1, bool at_start);
 void _glfwDispatchTickCallback();
+void _glfwDispatchRenderFrame(CGDirectDisplayID);

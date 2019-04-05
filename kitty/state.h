@@ -35,6 +35,7 @@ typedef struct {
     float window_padding_width;
     Edge tab_bar_edge;
     unsigned long tab_bar_min_tabs;
+    bool disable_ligatures_under_cursor;
     bool sync_to_monitor;
     bool close_on_child_death;
     bool window_alert_on_bell;
@@ -111,6 +112,7 @@ typedef struct {
     bool in_progress;
     bool from_os_notification;
     bool os_says_resize_complete;
+    unsigned int width, height;
 } LiveResizeInfo;
 
 
@@ -176,7 +178,7 @@ extern GlobalState global_state;
     else Py_DECREF(cret_); \
 }
 
-#define RESIZE_DEBOUNCE_TIME 0.1
+#define RESIZE_DEBOUNCE_TIME 0.2
 
 void gl_init();
 void remove_vao(ssize_t vao_idx);

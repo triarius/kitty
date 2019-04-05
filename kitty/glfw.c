@@ -50,22 +50,6 @@ update_os_window_viewport(OSWindow *window, bool notify_boss) {
     window->window_height = MAX(h, 100);
     if (notify_boss) {
         call_boss(on_window_resize, "KiiO", window->id, window->viewport_width, window->viewport_height, dpi_changed ? Py_True : Py_False);
-        if (dpi_changed && global_state.is_wayland) {
-           // Fake resize event needed on weston to ensure surface is
-           // positioned correctly after DPI change
-            glfwSetWindowSize(window->handle, window->window_width, window->window_height);
-        }
-    }
-}
-
-static void
-draw_resizing_text(OSWindow *w, unsigned int width, unsigned int height) {
-    char text[32] = {0};
-    snprintf(text, sizeof(text), "%u x %u cells", width / w->fonts_data->cell_width, height / w->fonts_data->cell_height);
-    StringCanvas rendered = render_simple_text(w->fonts_data, text);
-    if (rendered.canvas) {
-        draw_centered_alpha_mask(w->gvao_idx, width, height, rendered.width, rendered.height, rendered.canvas);
-        free(rendered.canvas);
     }
 }
 
@@ -123,6 +107,14 @@ window_close_callback(GLFWwindow* window) {
     global_state.callback_os_window = NULL;
 }
 
+#ifdef __APPLE__
+static void
+application_quit_canary_close_requested(GLFWwindow *window UNUSED) {
+    global_state.has_pending_closes = true;
+    request_tick_callback();
+}
+#endif
+
 static void
 window_occlusion_callback(GLFWwindow *window, bool occluded UNUSED) {
     if (!set_callback_window(window)) return;
@@ -158,14 +150,9 @@ framebuffer_size_callback(GLFWwindow *w, int width, int height) {
         global_state.has_pending_resizes = true;
         window->live_resize.in_progress = true;
         window->live_resize.last_resize_event_at = monotonic();
-        // render OS window as blank. On cocoa this is needed for semi-transparent windows,
-        // otherwise you get burn in of the previous frame. On Linux this is needed as otherwise
-        // you get partially rendered windows.
+        window->live_resize.width = MAX(0, width); window->live_resize.height = MAX(0, height);
         make_os_window_context_current(window);
         update_surface_size(width, height, window->offscreen_texture_id);
-        blank_os_window(window);
-        draw_resizing_text(window, MAX(0, width), MAX(0, height));
-        swap_window_buffers(window);
         request_tick_callback();
     } else log_error("Ignoring resize request for tiny size: %dx%d", width, height);
     global_state.callback_os_window = NULL;
@@ -378,9 +365,9 @@ get_window_content_scale(GLFWwindow *w, float *xscale, float *yscale, double *xd
         GLFWmonitor *monitor = glfwGetPrimaryMonitor();
         if (monitor) glfwGetMonitorContentScale(monitor, xscale, yscale);
     }
-    // check for zero or NaN values of xscale/yscale
-    if (!*xscale || *xscale != *xscale) *xscale = 1.0;
-    if (!*yscale || *yscale != *yscale) *yscale = 1.0;
+    // check for zero, negative, NaN or excessive values of xscale/yscale
+    if (*xscale <= 0 || *xscale != *xscale || *xscale >= 24) *xscale = 1.0;
+    if (*yscale <= 0 || *yscale != *yscale || *yscale >= 24) *yscale = 1.0;
 #ifdef __APPLE__
     const double factor = 72.0;
 #else
@@ -539,6 +526,7 @@ create_os_window(PyObject UNUSED *self, PyObject *args) {
 #ifdef __APPLE__
     if (is_first_window && !application_quit_canary) {
         application_quit_canary = glfwCreateWindow(100, 200, "quit_canary", NULL, NULL);
+        glfwSetWindowCloseCallback(application_quit_canary, application_quit_canary_close_requested);
     }
     if (!common_context) common_context = application_quit_canary;
 #endif
@@ -570,6 +558,9 @@ create_os_window(PyObject UNUSED *self, PyObject *args) {
     // blank the window once so that there is no initial flash of color
     // changing, in case the background color is not black
     blank_canvas(is_semi_transparent ? OPT(background_opacity) : 1.0f);
+#ifndef __APPLE__
+    if (is_first_window) glfwSwapInterval(OPT(sync_to_monitor) && !global_state.is_wayland ? 1 : 0);
+#endif
     glfwSwapBuffers(glfw_window);
     if (!global_state.is_wayland) {
         PyObject *pret = PyObject_CallFunction(pre_show_callback, "N", native_window_handle(glfw_window));
@@ -586,8 +577,6 @@ create_os_window(PyObject UNUSED *self, PyObject *args) {
         cocoa_create_global_menu();
         // This needs to be done only after the first window has been created, because glfw only sets the activation policy once upon initialization.
         if (OPT(macos_hide_from_tasks)) cocoa_set_hide_from_tasks();
-#else
-        glfwSwapInterval(OPT(sync_to_monitor) && !global_state.is_wayland ? 1 : 0);
 #endif
 #define CC(dest, shape) {\
     if (!dest##_cursor) { \
@@ -934,8 +923,8 @@ void
 wakeup_main_loop() {
     request_tick_callback();
 #ifndef __APPLE__
-    // On Cocoa request_tick_callback() uses an event which wakes up the
-    // main loop anyway
+    // On Cocoa request_tick_callback() uses performSelectorOnMainLoop which
+    // wakes up the main loop anyway
     glfwPostEmptyEvent();
 #endif
 }

@@ -253,10 +253,37 @@ class Tab:  # {{{
         if self.windows:
             self.remove_window(self.windows[self.active_window_idx])
 
+    def previous_active_window_idx(self, num):
+        try:
+            old_window_id = self.active_window_history[-num]
+        except IndexError:
+            return
+        for idx, w in enumerate(self.windows):
+            if w.id == old_window_id:
+                return idx
+
     def remove_window(self, window):
-        self.active_window_idx = self.current_layout.remove_window(self.windows, window, self.active_window_idx)
+        idx = self.previous_active_window_idx(1)
+        next_window_id = None
+        if idx is not None:
+            next_window_id = self.windows[idx].id
+        active_window_idx = self.current_layout.remove_window(self.windows, window, self.active_window_idx)
         remove_window(self.os_window_id, self.id, window.id)
+        if next_window_id is None and active_window_idx is not None and len(self.windows) > active_window_idx:
+            next_window_id = self.windows[active_window_idx].id
+        if next_window_id is not None:
+            for idx, window in enumerate(self.windows):
+                if window.id == next_window_id:
+                    self.active_window_idx = self.current_layout.set_active_window(self.windows, idx)
+                    break
+            else:
+                self.active_window_idx = active_window_idx
+        else:
+            self.active_window_idx = active_window_idx
         self.relayout_borders()
+        active_window = self.active_window
+        if active_window:
+            self.title_changed(active_window)
 
     def set_active_window_idx(self, idx):
         if idx != self.active_window_idx:
@@ -277,16 +304,10 @@ class Tab:  # {{{
     def nth_window(self, num=0):
         if self.windows:
             if num < 0:
-                try:
-                    old_window_id = self.active_window_history[num]
-                except IndexError:
+                idx = self.previous_active_window_idx(-num)
+                if idx is None:
                     return
-                for idx, w in enumerate(self.windows):
-                    if w.id == old_window_id:
-                        self.active_window_idx = self.current_layout.set_active_window(self.windows, idx)
-                        break
-                else:
-                    return
+                self.active_window_idx = self.current_layout.set_active_window(self.windows, idx)
             else:
                 self.active_window_idx = self.current_layout.nth_window(self.windows, num)
             self.relayout_borders()
@@ -531,16 +552,25 @@ class TabManager:  # {{{
     def remove(self, tab):
         self._remove_tab(tab)
         next_active_tab = -1
-        while self.active_tab_history and next_active_tab < 0:
-            tab_id = self.active_tab_history.pop()
-            if tab_id == tab.id:
-                continue
-            for idx, qtab in enumerate(self.tabs):
-                if qtab.id == tab_id:
-                    next_active_tab = idx
-                    break
+        while True:
+            try:
+                self.active_tab_history.remove(tab.id)
+            except ValueError:
+                break
+
+        if self.opts.tab_switch_strategy == 'previous':
+            while self.active_tab_history and next_active_tab < 0:
+                tab_id = self.active_tab_history.pop()
+                for idx, qtab in enumerate(self.tabs):
+                    if qtab.id == tab_id:
+                        next_active_tab = idx
+                        break
+        elif self.opts.tab_switch_strategy == 'left':
+            next_active_tab = max(0, self.active_tab_idx - 1)
+
         if next_active_tab < 0:
             next_active_tab = max(0, min(self.active_tab_idx, len(self.tabs) - 1))
+
         self._set_active_tab(next_active_tab)
         self.mark_tab_bar_dirty()
         tab.destroy()

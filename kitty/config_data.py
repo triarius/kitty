@@ -10,7 +10,7 @@ from . import fast_data_types as defines
 from .conf.definition import option_func
 from .conf.utils import (
     choices, positive_float, positive_int, to_bool, to_cmdline, to_color,
-    unit_float
+    to_color_or_none, unit_float
 )
 from .constants import config_dir, is_macos
 from .fast_data_types import CURSOR_BEAM, CURSOR_BLOCK, CURSOR_UNDERLINE
@@ -254,6 +254,11 @@ Syntax is::
 
     symbol_map codepoints Font Family Name
 
+'''))
+
+o('disable_ligatures_under_cursor', False, long_text=_('''
+Render the characters of a multi-character ligature under the cursor
+individually to make editing more intuitive.
 '''))
 
 
@@ -562,8 +567,9 @@ Negative values will cause the value of :opt:`window_margin_width` to be used in
 o('window_padding_width', 0.0, option_type=positive_float, long_text=_('''
 The window padding (in pts) (blank area between the text and the window border)'''))
 
-o('active_border_color', '#00ff00', option_type=to_color, long_text=_('''
-The color for the border of the active window'''))
+o('active_border_color', '#00ff00', option_type=to_color_or_none, long_text=_('''
+The color for the border of the active window. Set this to none to not draw borders
+around the active window.'''))
 
 o('inactive_border_color', '#cccccc', option_type=to_color, long_text=_('''
 The color for the border of inactive windows'''))
@@ -623,6 +629,13 @@ separated by a configurable separator.
 
 o('tab_bar_min_tabs', 2, option_type=lambda x: max(1, positive_int(x)), long_text=_('''
 The minimum number of tabs that must exist before the tab bar is shown
+'''))
+
+o('tab_switch_strategy', 'previous', option_type=choices('previous', 'left', 'last'), long_text=_('''
+The algorithm to use when switching to a tab when the current tab is closed.
+The default of :code:`previous` will switch to the last used tab. A value of
+:code:`left` will switch to the tab to the left of the closed tab. A value
+of :code:`last` will switch to the right-most tab.
 '''))
 
 
@@ -1125,7 +1138,7 @@ If you want to operate on all windows instead of just the current one, use :ital
 It is also possible to remap Ctrl+L to both scroll the current screen contents into the scrollback buffer
 and clear the screen, instead of just clearing the screen::
 
-    map ctrl+l combine : clear_terminal scroll active : send_text normal,application \x0c
+    map ctrl+l combine : clear_terminal scroll active : send_text normal,application \\x0c
 '''))
 k('send_text', 'ctrl+shift+alt+h', 'send_text all Hello World', _('Send arbitrary text on key presses'),
   add_to_default=False, long_text=_('''

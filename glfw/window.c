@@ -143,7 +143,7 @@ void _glfwInputFramebufferSize(_GLFWwindow* window, int width, int height)
 //
 void _glfwInputLiveResize(_GLFWwindow* window, bool started)
 {
-    if (window->callbacks.liveResize)
+    if (window && window->callbacks.liveResize)
         window->callbacks.liveResize((GLFWwindow*) window, started);
 }
 
@@ -277,8 +277,10 @@ GLFWAPI GLFWwindow* glfwCreateWindow(int width, int height,
         if (wndconfig.visible)
         {
             _glfwPlatformShowWindow(window);
+#ifndef _GLFW_WAYLAND
             if (wndconfig.focused)
                 _glfwPlatformFocusWindow(window);
+#endif
         }
     }
 
@@ -813,8 +815,10 @@ GLFWAPI void glfwShowWindow(GLFWwindow* handle)
 
     _glfwPlatformShowWindow(window);
 
+#ifndef _GLFW_WAYLAND
     if (window->focusOnShow)
         _glfwPlatformFocusWindow(window);
+#endif
 }
 
 GLFWAPI void glfwRequestWindowAttention(GLFWwindow* handle)

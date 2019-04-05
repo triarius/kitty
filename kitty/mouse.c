@@ -203,7 +203,7 @@ static inline void
 extend_selection(Window *w) {
     Screen *screen = w->render_data.screen;
     if (screen_has_selection(screen)) {
-        screen_update_selection(screen, w->mouse_pos.cell_x, w->mouse_pos.cell_y, false);
+        screen_update_selection(screen, w->mouse_pos.cell_x, w->mouse_pos.cell_y, true);
     }
 }
 
@@ -372,7 +372,7 @@ open_url(Window *w) {
 HANDLER(handle_button_event) {
     Tab *t = global_state.callback_os_window->tabs + global_state.callback_os_window->active_tab;
     bool is_release = !global_state.callback_os_window->mouse_button_pressed[button];
-    if (window_idx != t->active_window) {
+    if (window_idx != t->active_window && !is_release) {
         call_boss(switch_focus_to, "I", window_idx);
     }
     Screen *screen = w->render_data.screen;
