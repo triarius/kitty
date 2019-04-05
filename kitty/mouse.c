@@ -32,8 +32,6 @@ button_map(int button) {
             return 0;
         case GLFW_MOUSE_BUTTON_RIGHT:
             return 2;
-        /*case GLFW_MOUSE_BUTTON_MIDDLE:*/
-            /*return 1;*/
         case GLFW_MOUSE_BUTTON_4:
             return EXTRA_BUTTON_INDICATOR;
         case GLFW_MOUSE_BUTTON_5:
