@@ -852,6 +852,7 @@ class Boss:
         self.paste_to_active_window(text)
 
     def paste_from_selection(self):
+        return
         text = get_primary_selection() if supports_primary_selection else get_clipboard_string()
         self.paste_to_active_window(text)
 
