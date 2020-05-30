@@ -139,6 +139,7 @@ typedef struct {
 } OSWindowGeometry;
 
 enum RENDER_STATE { RENDER_FRAME_NOT_REQUESTED, RENDER_FRAME_REQUESTED, RENDER_FRAME_READY };
+typedef enum { NO_CLOSE_REQUESTED, CONFIRMABLE_CLOSE_REQUESTED, CLOSE_BEING_CONFIRMED, IMPERATIVE_CLOSE_REQUESTED } CloseRequest;
 
 typedef struct {
     monotonic_t last_resize_event_at;
@@ -183,6 +184,7 @@ typedef struct {
     uint64_t render_calls;
     id_type last_focused_counter;
     ssize_t gvao_idx;
+    CloseRequest close_request;
 } OSWindow;
 
 
@@ -195,7 +197,6 @@ typedef struct {
     OSWindow *os_windows;
     size_t num_os_windows, capacity;
     OSWindow *callback_os_window;
-    bool terminate;
     bool is_wayland;
     bool has_render_frames;
     bool debug_rendering, debug_font_fallback;
@@ -205,6 +206,7 @@ typedef struct {
     double font_sz_in_pts;
     struct { double x, y; } default_dpi;
     id_type active_drag_in_window;
+    CloseRequest quit_request;
 } GlobalState;
 
 extern GlobalState global_state;
@@ -220,9 +222,8 @@ void remove_vao(ssize_t vao_idx);
 bool remove_os_window(id_type os_window_id);
 void make_os_window_context_current(OSWindow *w);
 void update_os_window_references(void);
-void mark_os_window_for_close(OSWindow* w, bool yes);
+void mark_os_window_for_close(OSWindow* w, CloseRequest cr);
 void update_os_window_viewport(OSWindow *window, bool);
-bool should_os_window_close(OSWindow* w);
 bool should_os_window_be_rendered(OSWindow* w);
 void wakeup_main_loop(void);
 void swap_window_buffers(OSWindow *w);
@@ -263,8 +264,6 @@ typedef enum {
     NEW_TAB_WITH_WD = 8
 } CocoaPendingAction;
 void set_cocoa_pending_action(CocoaPendingAction action, const char*);
-bool application_quit_requested(void);
-void request_application_quit(void);
 #endif
 void request_frame_render(OSWindow *w);
 void request_tick_callback(void);
@@ -276,3 +275,5 @@ void update_main_loop_timer(id_type timer_id, monotonic_t interval, bool enabled
 void run_main_loop(tick_callback_fun, void*);
 void stop_main_loop(void);
 void os_window_update_size_increments(OSWindow *window);
+void set_os_window_title_from_window(Window *w, OSWindow *os_window);
+void update_os_window_title(OSWindow *os_window);

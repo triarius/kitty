@@ -2,7 +2,8 @@
 # vim:fileencoding=utf-8
 # License: GPL v3 Copyright: 2018, Kovid Goyal <kovid at kovidgoyal.net>
 
-from typing import Any, Dict, NamedTuple, Optional, Sequence, Set, Tuple
+from functools import lru_cache
+from typing import Any, Dict, NamedTuple, Optional, Sequence, Tuple
 
 from .config import build_ansi_color_table
 from .constants import WindowGeometry
@@ -10,7 +11,7 @@ from .fast_data_types import (
     DECAWM, Screen, cell_size_for_window, pt_to_px, set_tab_bar_render_data,
     viewport_for_window
 )
-from .layout import Rect
+from .layout.base import Rect
 from .options_stub import Options
 from .rgb import Color, alpha_blend, color_from_int
 from .utils import color_as_int, log_error
@@ -21,6 +22,8 @@ class TabBarData(NamedTuple):
     title: str
     is_active: bool
     needs_attention: bool
+    num_windows: int
+    layout_name: str
 
 
 class DrawData(NamedTuple):
@@ -43,7 +46,17 @@ def as_rgb(x: int) -> int:
     return (x << 8) | 2
 
 
-template_failures: Set[str] = set()
+@lru_cache()
+def report_template_failure(template: str, e: str) -> None:
+    log_error('Invalid tab title template: "{}" with error: {}'.format(template, e))
+
+
+@lru_cache()
+def compile_template(template: str) -> Any:
+    try:
+        return compile('f"""' + template + '"""', '<template>', 'eval')
+    except Exception as e:
+        report_template_failure(template, str(e))
 
 
 def draw_title(draw_data: DrawData, screen: Screen, tab: TabBarData, index: int) -> None:
@@ -56,11 +69,15 @@ def draw_title(draw_data: DrawData, screen: Screen, tab: TabBarData, index: int)
     if tab.is_active and draw_data.active_title_template is not None:
         template = draw_data.active_title_template
     try:
-        title = template.format(title=tab.title, index=index)
+        eval_locals = {
+            'index': index,
+            'layout_name': tab.layout_name,
+            'num_windows': tab.num_windows,
+            'title': tab.title
+        }
+        title = eval(compile_template(template), {'__builtins__': {}}, eval_locals)
     except Exception as e:
-        if template not in template_failures:
-            template_failures.add(template)
-            log_error('Invalid tab title template: "{}" with error: {}'.format(template, e))
+        report_template_failure(template, str(e))
         title = tab.title
     screen.draw(title)
 
@@ -84,7 +101,7 @@ def draw_tab_with_separator(draw_data: DrawData, screen: Screen, tab: TabBarData
     screen.cursor.fg = 0
     if not is_last:
         screen.cursor.bg = as_rgb(color_as_int(draw_data.inactive_bg))
-    screen.draw(draw_data.sep)
+        screen.draw(draw_data.sep)
     screen.cursor.bg = 0
     return end
 

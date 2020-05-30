@@ -6,7 +6,7 @@ import json
 import os
 import re
 import sys
-from typing import Callable, List, Optional, Tuple
+from typing import Callable, Dict, List, Optional, Tuple
 
 _plat = sys.platform.lower()
 is_linux = 'linux' in _plat
@@ -19,6 +19,7 @@ class Env:
     cppflags: List[str] = []
     cflags: List[str] = []
     ldflags: List[str] = []
+    library_paths: Dict[str, List[str]] = {}
     ldpaths: List[str] = []
     ccver: Tuple[int, int]
 
@@ -32,13 +33,13 @@ class Env:
 
     def __init__(
         self, cc: str = '', cppflags: List[str] = [], cflags: List[str] = [], ldflags: List[str] = [],
-        ldpaths: Optional[List[str]] = None, ccver: Tuple[int, int] = (0, 0)
+        library_paths: Dict[str, List[str]] = {}, ldpaths: Optional[List[str]] = None, ccver: Tuple[int, int] = (0, 0)
     ):
-        self.cc, self.cppflags, self.cflags, self.ldflags, self.ldpaths = cc, cppflags, cflags, ldflags, [] if ldpaths is None else ldpaths
-        self.ccver = ccver
+        self.cc, self.cppflags, self.cflags, self.ldflags, self.library_paths = cc, cppflags, cflags, ldflags, library_paths
+        self.ldpaths, self.ccver = [] if ldpaths is None else ldpaths, ccver
 
     def copy(self) -> 'Env':
-        ans = Env(self.cc, list(self.cppflags), list(self.cflags), list(self.ldflags), list(self.ldpaths), self.ccver)
+        ans = Env(self.cc, list(self.cppflags), list(self.cflags), list(self.ldflags), dict(self.library_paths), list(self.ldpaths), self.ccver)
         ans.all_headers = list(self.all_headers)
         ans.sources = list(self.sources)
         ans.wayland_packagedir = self.wayland_packagedir
@@ -55,7 +56,7 @@ def wayland_protocol_file_name(base: str, ext: str = 'c') -> str:
 
 def init_env(env: Env, pkg_config: Callable, at_least_version: Callable, test_compile: Callable, module: str = 'x11') -> Env:
     ans = env.copy()
-    ans.cflags.append('-fpic')
+    ans.cflags.append('-fPIC')
     ans.cppflags.append('-D_GLFW_' + module.upper())
     ans.cppflags.append('-D_GLFW_BUILD_DLL')
 
@@ -95,7 +96,7 @@ def init_env(env: Env, pkg_config: Callable, at_least_version: Callable, test_co
         for p in ans.wayland_protocols:
             ans.sources.append(wayland_protocol_file_name(p))
             ans.all_headers.append(wayland_protocol_file_name(p, 'h'))
-        for dep in 'wayland-egl wayland-client wayland-cursor xkbcommon dbus-1'.split():
+        for dep in 'wayland-client wayland-cursor xkbcommon dbus-1'.split():
             ans.cflags.extend(pkg_config(dep, '--cflags-only-I'))
             ans.ldpaths.extend(pkg_config(dep, '--libs'))
         has_memfd_create = test_compile(env.cc, '-Werror', src='''#define _GNU_SOURCE
@@ -202,6 +203,7 @@ def generate_wrappers(glfw_header: str) -> None:
     GLFWcocoatogglefullscreenfun glfwSetCocoaToggleFullscreenIntercept(GLFWwindow *window, GLFWcocoatogglefullscreenfun callback)
     GLFWapplicationshouldhandlereopenfun glfwSetApplicationShouldHandleReopen(GLFWapplicationshouldhandlereopenfun callback)
     GLFWapplicationwillfinishlaunchingfun glfwSetApplicationWillFinishLaunching(GLFWapplicationwillfinishlaunchingfun callback)
+    GLFWcocoaaplicationquitrequestedfun glfwSetApplicationQuitRequestedCallback(GLFWcocoaaplicationquitrequestedfun callback)
     void glfwGetCocoaKeyEquivalent(int glfw_key, int glfw_mods, char* cocoa_key, size_t key_sz, int* cocoa_mods)
     void glfwCocoaRequestRenderFrame(GLFWwindow *w, GLFWcocoarenderframefun callback)
     void* glfwGetX11Display(void)
@@ -242,6 +244,7 @@ typedef int (* GLFWcocoatextinputfilterfun)(int,int,unsigned int,unsigned long);
 typedef bool (* GLFWapplicationshouldhandlereopenfun)(int);
 typedef void (* GLFWapplicationwillfinishlaunchingfun)(void);
 typedef bool (* GLFWcocoatogglefullscreenfun)(GLFWwindow*);
+typedef void (* GLFWcocoaaplicationquitrequestedfun)(void);
 typedef void (* GLFWcocoarenderframefun)(GLFWwindow*);
 typedef void (*GLFWwaylandframecallbackfunc)(unsigned long long id);
 typedef void (*GLFWDBusnotificationcreatedfun)(unsigned long long, uint32_t, void*);

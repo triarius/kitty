@@ -839,6 +839,7 @@
 #define GLFW_STICKY_KEYS            0x00033002
 #define GLFW_STICKY_MOUSE_BUTTONS   0x00033003
 #define GLFW_LOCK_KEY_MODS          0x00033004
+#define GLFW_RAW_MOUSE_MOTION       0x00033005
 
 #define GLFW_CURSOR_NORMAL          0x00034001
 #define GLFW_CURSOR_HIDDEN          0x00034002
@@ -1313,6 +1314,7 @@ typedef void (* GLFWcursorenterfun)(GLFWwindow*,int);
  *  value 2 for stationary momentum scrolling, value 3 for momentum scrolling
  *  in progress, value 4 for momentum scrolling ended, value 5 for momentum
  *  scrolling cancelled and value 6 if scrolling may begin soon.
+ *  @param[int] mods The keyboard modifiers
  *
  *  @sa @ref scrolling
  *  @sa @ref glfwSetScrollCallback
@@ -1322,7 +1324,7 @@ typedef void (* GLFWcursorenterfun)(GLFWwindow*,int);
  *
  *  @ingroup input
  */
-typedef void (* GLFWscrollfun)(GLFWwindow*,double,double,int);
+typedef void (* GLFWscrollfun)(GLFWwindow*,double,double,int,int);
 
 /*! @brief The function pointer type for key callbacks.
  *
@@ -1585,6 +1587,7 @@ typedef int (* GLFWcocoatextinputfilterfun)(int,int,unsigned int,unsigned long);
 typedef bool (* GLFWapplicationshouldhandlereopenfun)(int);
 typedef void (* GLFWapplicationwillfinishlaunchingfun)(void);
 typedef bool (* GLFWcocoatogglefullscreenfun)(GLFWwindow*);
+typedef void (* GLFWcocoaaplicationquitrequestedfun)(void);
 typedef void (* GLFWcocoarenderframefun)(GLFWwindow*);
 typedef void (*GLFWwaylandframecallbackfunc)(unsigned long long id);
 typedef void (*GLFWDBusnotificationcreatedfun)(unsigned long long, uint32_t, void*);
@@ -2092,6 +2095,10 @@ GFW_EXTERN glfwSetApplicationShouldHandleReopen_func glfwSetApplicationShouldHan
 typedef GLFWapplicationwillfinishlaunchingfun (*glfwSetApplicationWillFinishLaunching_func)(GLFWapplicationwillfinishlaunchingfun);
 GFW_EXTERN glfwSetApplicationWillFinishLaunching_func glfwSetApplicationWillFinishLaunching_impl;
 #define glfwSetApplicationWillFinishLaunching glfwSetApplicationWillFinishLaunching_impl
+
+typedef GLFWcocoaaplicationquitrequestedfun (*glfwSetApplicationQuitRequestedCallback_func)(GLFWcocoaaplicationquitrequestedfun);
+GFW_EXTERN glfwSetApplicationQuitRequestedCallback_func glfwSetApplicationQuitRequestedCallback_impl;
+#define glfwSetApplicationQuitRequestedCallback glfwSetApplicationQuitRequestedCallback_impl
 
 typedef void (*glfwGetCocoaKeyEquivalent_func)(int, int, char*, size_t, int*);
 GFW_EXTERN glfwGetCocoaKeyEquivalent_func glfwGetCocoaKeyEquivalent_impl;

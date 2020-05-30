@@ -429,6 +429,7 @@ struct _GLFWwindow
     char                keys[GLFW_KEY_LAST + 1];
     // Virtual cursor position when cursor is disabled
     double              virtualCursorPosX, virtualCursorPosY;
+    bool                rawMouseMotion;
 
     _GLFWcontext        context;
 
@@ -631,6 +632,8 @@ const char* _glfwPlatformGetVersionString(void);
 void _glfwPlatformGetCursorPos(_GLFWwindow* window, double* xpos, double* ypos);
 void _glfwPlatformSetCursorPos(_GLFWwindow* window, double xpos, double ypos);
 void _glfwPlatformSetCursorMode(_GLFWwindow* window, int mode);
+void _glfwPlatformSetRawMouseMotion(_GLFWwindow *window, bool enabled);
+bool _glfwPlatformRawMouseMotionSupported(void);
 int _glfwPlatformCreateCursor(_GLFWcursor* cursor,
                               const GLFWimage* image, int xhot, int yhot, int count);
 int _glfwPlatformCreateStandardCursor(_GLFWcursor* cursor, GLFWCursorShape shape);
@@ -755,7 +758,7 @@ void _glfwInputWindowMonitor(_GLFWwindow* window, _GLFWmonitor* monitor);
 
 void _glfwInitializeKeyEvent(GLFWkeyevent *ev, int key, int native_key, int action, int mods);
 void _glfwInputKeyboard(_GLFWwindow *window, GLFWkeyevent *ev);
-void _glfwInputScroll(_GLFWwindow* window, double xoffset, double yoffset, int flags);
+void _glfwInputScroll(_GLFWwindow* window, double xoffset, double yoffset, int flags, int mods);
 void _glfwInputMouseClick(_GLFWwindow* window, int button, int action, int mods);
 void _glfwInputCursorPos(_GLFWwindow* window, double xpos, double ypos);
 void _glfwInputCursorEnter(_GLFWwindow* window, bool entered);

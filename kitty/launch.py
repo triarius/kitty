@@ -42,7 +42,7 @@ choices=window,tab,os-window,overlay,background,clipboard,primary
 Where to launch the child process, in a new kitty window in the current tab,
 a new tab, or a new OS window or an overlay over the current window.
 Note that if the current window already has an overlay, then it will
-open a new window. The value of none means the process will be
+open a new window. The value of background means the process will be
 run in the background. The values clipboard and primary are meant
 to work with :option:`launch --stdin-source` to copy data to the system
 clipboard or primary selection.
@@ -273,10 +273,10 @@ def launch(boss: Boss, opts: LaunchCLIOptions, args: List[str], target_tab: Opti
                     x = str(active.id)
             final_cmd.append(x)
         kw['cmd'] = final_cmd
-    if opts.type == 'overlay' and active and not active.overlay_window_id:
+    if opts.type == 'overlay' and active:
         kw['overlay_for'] = active.id
-    if opts.stdin_source and opts.stdin_source != 'none':
-        q = opts.stdin_source
+    if opts.stdin_source != 'none':
+        q = str(opts.stdin_source)
         if opts.stdin_add_formatting:
             if q in ('@screen', '@screen_scrollback', '@alternate', '@alternate_scrollback'):
                 q = '@ansi_' + q[1:]

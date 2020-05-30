@@ -289,9 +289,9 @@ class PrintHelpForSeq:
                 leading_indent = indent
             j = '\n' + (' ' * indent)
             lines: List[str] = []
-            for l in text.splitlines():
-                if l:
-                    lines.extend(wrap(l, limit=linesz - indent))
+            for ln in text.splitlines():
+                if ln:
+                    lines.extend(wrap(ln, limit=linesz - indent))
                 else:
                     lines.append('')
             a((' ' * leading_indent) + j.join(lines))
@@ -409,7 +409,10 @@ def as_type_stub(seq: OptionSpecSeq, disabled: OptionSpecSeq, class_name: str, e
         elif otype == 'list':
             t = 'typing.Sequence[str]'
         elif otype in ('choice', 'choices'):
-            t = 'str'
+            if opt['choices']:
+                t = 'typing.Literal[{}]'.format(','.join(f'{x!r}' for x in opt['choices']))
+            else:
+                t = 'str'
         elif otype.startswith('bool-'):
             t = 'bool'
         else:

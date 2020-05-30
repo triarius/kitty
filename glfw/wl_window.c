@@ -388,9 +388,9 @@ static const struct zxdg_toplevel_decoration_v1_listener xdgDecorationListener =
     xdgDecorationHandleConfigure,
 };
 
-static void handleEnter(void *data,
-                        struct wl_surface *surface UNUSED,
-                        struct wl_output *output)
+static void surfaceHandleEnter(void *data,
+                               struct wl_surface *surface UNUSED,
+                               struct wl_output *output)
 {
     _GLFWwindow* window = data;
     _GLFWmonitor* monitor = wl_output_get_user_data(output);
@@ -411,9 +411,9 @@ static void handleEnter(void *data,
     }
 }
 
-static void handleLeave(void *data,
-                        struct wl_surface *surface UNUSED,
-                        struct wl_output *output)
+static void surfaceHandleLeave(void *data,
+                               struct wl_surface *surface UNUSED,
+                               struct wl_output *output)
 {
     _GLFWwindow* window = data;
     _GLFWmonitor* monitor = wl_output_get_user_data(output);
@@ -436,8 +436,8 @@ static void handleLeave(void *data,
 }
 
 static const struct wl_surface_listener surfaceListener = {
-    handleEnter,
-    handleLeave
+    surfaceHandleEnter,
+    surfaceHandleLeave
 };
 
 static void setIdleInhibitor(_GLFWwindow* window, bool enable)
@@ -957,12 +957,10 @@ void _glfwPlatformSetWindowTitle(_GLFWwindow* window, const char* title)
 {
     if (window->wl.title)
         free(window->wl.title);
-    window->wl.title = _glfw_strdup(title);
     // Wayland cannot handle requests larger than ~8200 bytes. Sending
     // one causes an abort(). Since titles this large are meaningless anyway
-    // ensure they do not happen. One should really truncate ensuring valid UTF-8
-    // but I cant be bothered.
-    if (title && strnlen(title, 2048) >= 2048) window->wl.title[2048] = 0;
+    // ensure they do not happen.
+    window->wl.title = utf_8_strndup(title, 2048);
     if (window->wl.xdg.toplevel)
         xdg_toplevel_set_title(window->wl.xdg.toplevel, window->wl.title);
 }
@@ -1239,6 +1237,16 @@ void _glfwPlatformSetWindowOpacity(_GLFWwindow* window UNUSED, float opacity UNU
 {
 }
 
+void _glfwPlatformSetRawMouseMotion(_GLFWwindow *window UNUSED, bool enabled UNUSED)
+{
+    // This is handled in relativePointerHandleRelativeMotion
+}
+
+bool _glfwPlatformRawMouseMotionSupported(void)
+{
+    return true;
+}
+
 void _glfwPlatformPollEvents(void)
 {
     wl_display_dispatch_pending(_glfw.wl.display);
@@ -1333,31 +1341,42 @@ void _glfwPlatformDestroyCursor(_GLFWcursor* cursor)
         wl_buffer_destroy(cursor->wl.buffer);
 }
 
-static void handleRelativeMotion(void* data,
-                                 struct zwp_relative_pointer_v1* pointer UNUSED,
-                                 uint32_t timeHi UNUSED,
-                                 uint32_t timeLo UNUSED,
-                                 wl_fixed_t dx UNUSED,
-                                 wl_fixed_t dy UNUSED,
-                                 wl_fixed_t dxUnaccel,
-                                 wl_fixed_t dyUnaccel)
+static void relativePointerHandleRelativeMotion(void* data,
+                                                struct zwp_relative_pointer_v1* pointer UNUSED,
+                                                uint32_t timeHi UNUSED,
+                                                uint32_t timeLo UNUSED,
+                                                wl_fixed_t dx,
+                                                wl_fixed_t dy,
+                                                wl_fixed_t dxUnaccel,
+                                                wl_fixed_t dyUnaccel)
 {
     _GLFWwindow* window = data;
+    double xpos = window->virtualCursorPosX;
+    double ypos = window->virtualCursorPosY;
 
     if (window->cursorMode != GLFW_CURSOR_DISABLED)
         return;
 
-    _glfwInputCursorPos(window,
-                        window->virtualCursorPosX + wl_fixed_to_double(dxUnaccel),
-                        window->virtualCursorPosY + wl_fixed_to_double(dyUnaccel));
+    if (window->rawMouseMotion)
+    {
+        xpos += wl_fixed_to_double(dxUnaccel);
+        ypos += wl_fixed_to_double(dyUnaccel);
+    }
+    else
+    {
+        xpos += wl_fixed_to_double(dx);
+        ypos += wl_fixed_to_double(dy);
+    }
+
+    _glfwInputCursorPos(window, xpos, ypos);
 }
 
 static const struct zwp_relative_pointer_v1_listener relativePointerListener = {
-    handleRelativeMotion
+    relativePointerHandleRelativeMotion
 };
 
-static void handleLocked(void* data UNUSED,
-                         struct zwp_locked_pointer_v1* lockedPointer UNUSED)
+static void lockedPointerHandleLocked(void* data UNUSED,
+                                      struct zwp_locked_pointer_v1* lockedPointer UNUSED)
 {
 }
 
@@ -1377,14 +1396,14 @@ static void unlockPointer(_GLFWwindow* window)
 
 static void lockPointer(_GLFWwindow* window UNUSED);
 
-static void handleUnlocked(void* data UNUSED,
-                           struct zwp_locked_pointer_v1* lockedPointer UNUSED)
+static void lockedPointerHandleUnlocked(void* data UNUSED,
+                                        struct zwp_locked_pointer_v1* lockedPointer UNUSED)
 {
 }
 
 static const struct zwp_locked_pointer_v1_listener lockedPointerListener = {
-    handleLocked,
-    handleUnlocked
+    lockedPointerHandleLocked,
+    lockedPointerHandleUnlocked
 };
 
 static void lockPointer(_GLFWwindow* window)

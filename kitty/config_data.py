@@ -18,7 +18,7 @@ from .conf.utils import (
 )
 from .constants import FloatEdges, config_dir, is_macos
 from .fast_data_types import CURSOR_BEAM, CURSOR_BLOCK, CURSOR_UNDERLINE
-from .layout import all_layouts
+from .layout.interface import all_layouts
 from .rgb import Color, color_as_int, color_as_sharp, color_from_int
 from .utils import log_error
 
@@ -445,7 +445,8 @@ Program with which to view scrollback in a new window. The scrollback buffer is
 passed as STDIN to this program. If you change it, make sure the program you
 use can handle ANSI escape sequences for colors and text formatting.
 INPUT_LINE_NUMBER in the command line above will be replaced by an integer
-representing which line should be at the top of the screen.'''))
+representing which line should be at the top of the screen. Similarly CURSOR_LINE and CURSOR_COLUMN
+will be replaced by the current cursor position.'''))
 
 o('scrollback_pager_history_size', 0, option_type=scrollback_pager_history_size, long_text=_('''
 Separate scrollback history size, used only for browsing the scrollback buffer (in MB).
@@ -548,7 +549,7 @@ rectangular block with the mouse)'''))
 o('terminal_select_modifiers', 'shift', option_type=to_modifiers, long_text=_('''
 The modifiers to override mouse selection even when a terminal application has grabbed the mouse'''))
 
-o('select_by_word_characters', ':@-./_~?&=%+#', long_text=_('''
+o('select_by_word_characters', '@-./_~?&=%+#', long_text=_('''
 Characters considered part of a word when double clicking. In addition to these characters
 any character that is marked as an alphanumeric character in the unicode
 database will be matched.'''))
@@ -778,6 +779,12 @@ this option can be used to keep the margins as small as possible when resizing t
 Note that this does not currently work on Wayland.
 '''))
 
+o('confirm_os_window_close', 0, option_type=positive_int, long_text=_('''
+Ask for confirmation when closing an OS window that has at least this
+number of kitty windows in it. A value of zero disables confirmation.
+This confirmation also applies to requests to quit the entire application (all
+OS windows, via the quite action).
+'''))
 # }}}
 
 g('tabbar')   # {{{
@@ -870,6 +877,11 @@ A template to render the tab title. The default just renders
 the title. If you wish to include the tab-index as well,
 use something like: :code:`{index}: {title}`. Useful
 if you have shortcuts mapped for :code:`goto_tab N`.
+In addition you can use :code:`{layout_name}` for the current
+layout name and :code:`{num_windows}` for the number of windows
+in the tab. Note that formatting is done by Python's string formatting
+machinery, so you can use, for instance, :code:`{layout_name[:2].upper()}` to
+show only the first two letters of the layout name, upper-cased.
 '''))
 o('active_tab_title_template', 'none', option_type=active_tab_title_template, long_text=_('''
 Template to use for active tabs, if not specified falls back
@@ -1369,8 +1381,7 @@ if is_macos:
 k('close_tab', 'kitty_mod+q', 'close_tab', _('Close tab'))
 if is_macos:
     k('close_tab', 'cmd+w', 'close_tab', _('Close tab'), add_to_docs=False)
-    #  Not yet implemented
-    #  k('close_os_window', 'shift+cmd+w', 'close_os_window', _('Close os window'), add_to_docs=False)
+    k('close_os_window', 'shift+cmd+w', 'close_os_window', _('Close OS window'), add_to_docs=False)
 k('move_tab_forward', 'kitty_mod+.', 'move_tab_forward', _('Move tab forward'))
 k('move_tab_backward', 'kitty_mod+,', 'move_tab_backward', _('Move tab backward'))
 k('set_tab_title', 'kitty_mod+alt+t', 'set_tab_title', _('Set tab title'))

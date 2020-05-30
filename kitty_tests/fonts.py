@@ -128,3 +128,17 @@ class Rendering(BaseTest):
     def test_coalesce_symbol_maps(self):
         q = {(2, 3): 'a', (4, 6): 'b', (5, 5): 'b', (7, 7): 'b', (9, 9): 'b', (1, 1): 'a'}
         self.ae(coalesce_symbol_maps(q), {(1, 3): 'a', (4, 7): 'b', (9, 9): 'b'})
+        q = {(1, 4): 'a', (2, 3): 'b'}
+        self.ae(coalesce_symbol_maps(q), {(1, 1): 'a', (2, 3): 'b', (4, 4): 'a'})
+        q = {(2, 3): 'b', (1, 4): 'a'}
+        self.ae(coalesce_symbol_maps(q), {(1, 4): 'a'})
+        q = {(1, 4): 'a', (2, 5): 'b'}
+        self.ae(coalesce_symbol_maps(q), {(1, 1): 'a', (2, 5): 'b'})
+        q = {(2, 5): 'b', (1, 4): 'a'}
+        self.ae(coalesce_symbol_maps(q), {(1, 4): 'a', (5, 5): 'b'})
+        q = {(1, 4): 'a', (2, 5): 'a'}
+        self.ae(coalesce_symbol_maps(q), {(1, 5): 'a'})
+        q = {(1, 4): 'a', (4, 5): 'b'}
+        self.ae(coalesce_symbol_maps(q), {(1, 3): 'a', (4, 5): 'b'})
+        q = {(4, 5): 'b', (1, 4): 'a'}
+        self.ae(coalesce_symbol_maps(q), {(1, 4): 'a', (5, 5): 'b'})

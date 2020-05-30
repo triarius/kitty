@@ -4,6 +4,60 @@ Changelog
 |kitty| is a feature full, cross-platform, *fast*, GPU based terminal emulator.
 To update |kitty|, :doc:`follow the instructions <binary>`.
 
+0.18.0 [future]
+--------------------
+
+- Allow multiple overlay windows per normal window
+
+- Tall and Fat layouts: Add a ``mirrored`` option to put the full size window
+  on the opposite edge of the screen (:iss:`2654`)
+
+- Tall and Fat layouts: Add mappable actions to increase or decrease the number
+  of full size windows (:iss:`2688`)
+
+- Add an option :opt:`confirm_os_window_close` to ask for confirmation
+  when closing an OS window with multiple kitty windows.
+
+- Add a new mappable ``quit`` action to quit kitty completely.
+
+- Fix marks using different colors with regexes using only a single color
+  (:pull:`2663`)
+
+- Linux: Workaround for broken Nvidia drivers for old cards (:iss:`456`)
+
+- Wayland: Fix kitty being killed on some Wayland compositors if a hidden window
+  has a lot of output (:iss:`2329`)
+
+- BSD: Fix controlling terminal not being established (:pull:`2686`)
+
+
+0.17.4 [2020-05-09]
+--------------------
+
+- Allow showing the name of the current layout and the number of windows
+  in tab titles (:iss:`2634`)
+
+- macOS: Fix a regression in the previous release that caused ligatures to be
+  not be centered horizontally (:iss:`2591`)
+
+- By default, double clicking no longer considers the : as part of words, see
+  :opt:`select_by_word_characters` (:iss:`2602`)
+
+- Fix a regression that caused clicking in the padding/margins of windows in
+  the stack layout to switch the window to the first window (:iss:`2604`)
+
+- macOS: Fix a regression that broke drag and drop (:iss:`2605`)
+
+- Report modifier key state when sending wheel events to the terminal program
+
+- Fix kitty @ send-text not working with text larger than 1024 bytes when using
+  :option:`kitty --listen-on` (:iss:`2607`)
+
+- Wayland: Fix OS window title not updating for hidden windows (:iss:`2629`)
+
+- Fix :opt:`background_tint` making the window semi-transparent (:iss:`2618`)
+
+
 0.17.3 [2020-04-23]
 --------------------
 

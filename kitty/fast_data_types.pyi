@@ -10,6 +10,9 @@ from kitty.options_stub import Options
 
 # Constants {{{
 KITTY_VCS_REV: str
+NO_CLOSE_REQUESTED: int
+IMPERATIVE_CLOSE_REQUESTED: int
+CLOSE_BEING_CONFIRMED: int
 ERROR_PREFIX: str
 GLSL_VERSION: int
 GLFW_IBEAM_CURSOR: int
@@ -544,9 +547,13 @@ def update_window_title(
 
 
 def update_window_visibility(
-    os_window_id: int, tab_id: int, window_id: int, window_idx: int,
+    os_window_id: int, tab_id: int, window_id: int,
     visible: bool
 ) -> None:
+    pass
+
+
+def sync_os_window_title(os_window_id: int) -> None:
     pass
 
 
@@ -702,7 +709,15 @@ def cocoa_get_lang() -> Optional[str]:
     pass
 
 
-def mark_os_window_for_close(os_window_id: int, yes: bool = True) -> bool:
+def mark_os_window_for_close(os_window_id: int, cr_type: int = 2) -> bool:
+    pass
+
+
+def set_application_quit_request(cr_type: int = 2) -> None:
+    pass
+
+
+def current_application_quit_request() -> int:
     pass
 
 
@@ -770,15 +785,11 @@ def swap_tabs(os_window_id: int, a: int, b: int) -> None:
     pass
 
 
-def swap_windows(os_window_id: int, tab_id: int, a: int, b: int) -> None:
-    pass
-
-
 def set_active_tab(os_window_id: int, a: int) -> None:
     pass
 
 
-def set_active_window(os_window_id: int, tab_id: int, window_idx: int) -> None:
+def set_active_window(os_window_id: int, tab_id: int, window_id: int) -> None:
     pass
 
 
@@ -1059,7 +1070,7 @@ def set_tab_bar_render_data(
 
 
 def set_window_render_data(
-    os_window_id: int, tab_id: int, window_id: int, window_idx: int,
+    os_window_id: int, tab_id: int, window_id: int,
     xstart: float, ystart: float, dx: float, dy: float, screen: Screen,
     left: int, top: int, right: int, bottom: int
 ) -> None:

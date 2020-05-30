@@ -455,22 +455,41 @@ static void updateCursorImage(_GLFWwindow* window)
     }
 }
 
+// Enable XI2 raw mouse motion events
+//
+static void enableRawMouseMotion(_GLFWwindow* window UNUSED)
+{
+    XIEventMask em;
+    unsigned char mask[XIMaskLen(XI_RawMotion)] = { 0 };
+
+    em.deviceid = XIAllMasterDevices;
+    em.mask_len = sizeof(mask);
+    em.mask = mask;
+    XISetMask(mask, XI_RawMotion);
+
+    XISelectEvents(_glfw.x11.display, _glfw.x11.root, &em, 1);
+}
+
+// Disable XI2 raw mouse motion events
+//
+static void disableRawMouseMotion(_GLFWwindow* window UNUSED)
+{
+    XIEventMask em;
+    unsigned char mask[] = { 0 };
+
+    em.deviceid = XIAllMasterDevices;
+    em.mask_len = sizeof(mask);
+    em.mask = mask;
+
+    XISelectEvents(_glfw.x11.display, _glfw.x11.root, &em, 1);
+}
+
 // Apply disabled cursor mode to a focused window
 //
 static void disableCursor(_GLFWwindow* window)
 {
-    if (_glfw.x11.xi.available)
-    {
-        XIEventMask em;
-        unsigned char mask[XIMaskLen(XI_RawMotion)] = { 0 };
-
-        em.deviceid = XIAllMasterDevices;
-        em.mask_len = sizeof(mask);
-        em.mask = mask;
-        XISetMask(mask, XI_RawMotion);
-
-        XISelectEvents(_glfw.x11.display, _glfw.x11.root, &em, 1);
-    }
+    if (window->rawMouseMotion)
+        enableRawMouseMotion(window);
 
     _glfw.x11.disabledCursorWindow = window;
     _glfwPlatformGetCursorPos(window,
@@ -490,17 +509,8 @@ static void disableCursor(_GLFWwindow* window)
 //
 static void enableCursor(_GLFWwindow* window)
 {
-    if (_glfw.x11.xi.available)
-    {
-        XIEventMask em;
-        unsigned char mask[] = { 0 };
-
-        em.deviceid = XIAllMasterDevices;
-        em.mask_len = sizeof(mask);
-        em.mask = mask;
-
-        XISelectEvents(_glfw.x11.display, _glfw.x11.root, &em, 1);
-    }
+    if (window->rawMouseMotion)
+        disableRawMouseMotion(window);
 
     _glfw.x11.disabledCursorWindow = NULL;
     XUngrabPointer(_glfw.x11.display, CurrentTime);
@@ -1122,6 +1132,7 @@ static void processEvent(XEvent *event)
             _GLFWwindow* window = _glfw.x11.disabledCursorWindow;
 
             if (window &&
+                window->rawMouseMotion &&
                 event->xcookie.extension == _glfw.x11.xi.majorOpcode &&
                 XGetEventData(_glfw.x11.display, &event->xcookie) &&
                 event->xcookie.evtype == XI_RawMotion)
@@ -1265,13 +1276,13 @@ static void processEvent(XEvent *event)
 
             // Modern X provides scroll events as mouse button presses
             else if (event->xbutton.button == Button4)
-                _glfwInputScroll(window, 0.0, 1.0, 0);
+                _glfwInputScroll(window, 0.0, 1.0, 0, mods);
             else if (event->xbutton.button == Button5)
-                _glfwInputScroll(window, 0.0, -1.0, 0);
+                _glfwInputScroll(window, 0.0, -1.0, 0, mods);
             else if (event->xbutton.button == Button6)
-                _glfwInputScroll(window, 1.0, 0.0, 0);
+                _glfwInputScroll(window, 1.0, 0.0, 0, mods);
             else if (event->xbutton.button == Button7)
-                _glfwInputScroll(window, -1.0, 0.0, 0);
+                _glfwInputScroll(window, -1.0, 0.0, 0, mods);
 
             else
             {
@@ -1363,7 +1374,7 @@ static void processEvent(XEvent *event)
                 {
                     if (_glfw.x11.disabledCursorWindow != window)
                         return;
-                    if (_glfw.x11.xi.available)
+                    if (window->rawMouseMotion)
                         return;
 
                     const int dx = x - window->x11.lastCursorPosX;
@@ -1408,12 +1419,18 @@ static void processEvent(XEvent *event)
             if (!event->xany.send_event && window->x11.parent != _glfw.x11.root)
             {
                 Window dummy;
+                _glfwGrabErrorHandlerX11();
                 XTranslateCoordinates(_glfw.x11.display,
                                       window->x11.parent,
                                       _glfw.x11.root,
                                       xpos, ypos,
                                       &xpos, &ypos,
                                       &dummy);
+                _glfwReleaseErrorHandlerX11();
+                if (_glfw.x11.errorCode != Success) {
+                    _glfwInputError(GLFW_PLATFORM_ERROR, "X11: Failed to translate ConfigureNotiy co-ords for reparented window");
+                    return;
+                }
             }
 
             if (xpos != window->x11.xpos || ypos != window->x11.ypos)
@@ -1550,17 +1567,21 @@ static void processEvent(XEvent *event)
                 const int xabs = (event->xclient.data.l[2] >> 16) & 0xffff;
                 const int yabs = (event->xclient.data.l[2]) & 0xffff;
                 Window dummy;
-                int xpos, ypos;
+                int xpos = 0, ypos = 0;
 
                 if (_glfw.x11.xdnd.version > _GLFW_XDND_VERSION)
                     return;
 
+                _glfwGrabErrorHandlerX11();
                 XTranslateCoordinates(_glfw.x11.display,
                                       _glfw.x11.root,
                                       window->x11.handle,
                                       xabs, yabs,
                                       &xpos, &ypos,
                                       &dummy);
+                _glfwReleaseErrorHandlerX11();
+                if (_glfw.x11.errorCode != Success)
+                    _glfwInputError(GLFW_PLATFORM_ERROR, "X11: Failed to get DND event position");
 
                 _glfwInputCursorPos(window, xpos, ypos);
 
@@ -1815,7 +1836,7 @@ int _glfwPlatformCreateWindow(_GLFWwindow* window,
                               const _GLFWctxconfig* ctxconfig,
                               const _GLFWfbconfig* fbconfig)
 {
-    Visual* visual;
+    Visual* visual = NULL;
     int depth;
 
     if (ctxconfig->client != GLFW_NO_API)
@@ -1841,8 +1862,7 @@ int _glfwPlatformCreateWindow(_GLFWwindow* window,
         }
     }
 
-    if (ctxconfig->client == GLFW_NO_API ||
-        ctxconfig->source == GLFW_OSMESA_CONTEXT_API)
+    if (!visual)
     {
         visual = DefaultVisual(_glfw.x11.display, _glfw.x11.screen);
         depth = DefaultDepth(_glfw.x11.display, _glfw.x11.screen);
@@ -1988,10 +2008,14 @@ void _glfwPlatformSetWindowIcon(_GLFWwindow* window,
 void _glfwPlatformGetWindowPos(_GLFWwindow* window, int* xpos, int* ypos)
 {
     Window dummy;
-    int x, y;
+    int x = 0, y = 0;
 
+    _glfwGrabErrorHandlerX11();
     XTranslateCoordinates(_glfw.x11.display, window->x11.handle, _glfw.x11.root,
                           0, 0, &x, &y, &dummy);
+    _glfwReleaseErrorHandlerX11();
+    if (_glfw.x11.errorCode != Success)
+        _glfwInputError(GLFW_PLATFORM_ERROR, "X11: Failed to get window position");
 
     if (xpos)
         *xpos = x;
@@ -2614,6 +2638,25 @@ _glfwDispatchX11Events(void) {
     // a flush.
     dispatched += dispatch_x11_queued_events(XEventsQueued(_glfw.x11.display, QueuedAlready));
     return dispatched;
+}
+
+void _glfwPlatformSetRawMouseMotion(_GLFWwindow *window, bool enabled)
+{
+    if (!_glfw.x11.xi.available)
+        return;
+
+    if (_glfw.x11.disabledCursorWindow != window)
+        return;
+
+    if (enabled)
+        enableRawMouseMotion(window);
+    else
+        disableRawMouseMotion(window);
+}
+
+bool _glfwPlatformRawMouseMotionSupported(void)
+{
+    return _glfw.x11.xi.available;
 }
 
 void _glfwPlatformPollEvents(void)

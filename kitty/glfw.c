@@ -152,18 +152,14 @@ blank_os_window(OSWindow *w) {
 static void
 window_close_callback(GLFWwindow* window) {
     if (!set_callback_window(window)) return;
-    global_state.has_pending_closes = true;
-    request_tick_callback();
+    if (global_state.callback_os_window->close_request == NO_CLOSE_REQUESTED) {
+        global_state.callback_os_window->close_request = CONFIRMABLE_CLOSE_REQUESTED;
+        global_state.has_pending_closes = true;
+        request_tick_callback();
+    }
+    glfwSetWindowShouldClose(window, false);
     global_state.callback_os_window = NULL;
 }
-
-#ifdef __APPLE__
-static void
-application_quit_canary_close_requested(GLFWwindow *window UNUSED) {
-    global_state.has_pending_closes = true;
-    request_tick_callback();
-}
-#endif
 
 static void
 window_occlusion_callback(GLFWwindow *window, bool occluded UNUSED) {
@@ -287,12 +283,12 @@ cursor_pos_callback(GLFWwindow *w, double x, double y) {
 }
 
 static void
-scroll_callback(GLFWwindow *w, double xoffset, double yoffset, int flags) {
+scroll_callback(GLFWwindow *w, double xoffset, double yoffset, int flags, int mods) {
     if (!set_callback_window(w)) return;
     show_mouse_cursor(w);
     monotonic_t now = monotonic();
     global_state.callback_os_window->last_mouse_activity_at = now;
-    if (is_window_ready_for_callbacks()) scroll_event(xoffset, yoffset, flags);
+    if (is_window_ready_for_callbacks()) scroll_event(xoffset, yoffset, flags, mods);
     request_tick_callback();
     global_state.callback_os_window = NULL;
 }
@@ -323,25 +319,29 @@ window_focus_callback(GLFWwindow *w, int focused) {
 static int
 drop_callback(GLFWwindow *w, const char *mime, const char *data, size_t sz) {
     if (!set_callback_window(w)) return 0;
+#define RETURN(x) { global_state.callback_os_window = NULL; return x; }
     if (!data) {
-        if (strcmp(mime, "text/uri-list") == 0) return 3;
-        if (strcmp(mime, "text/plain;charset=utf-8") == 0) return 2;
-        if (strcmp(mime, "text/plain") == 0) return 1;
-        return 0;
+        if (strcmp(mime, "text/uri-list") == 0) RETURN(3);
+        if (strcmp(mime, "text/plain;charset=utf-8") == 0) RETURN(2);
+        if (strcmp(mime, "text/plain") == 0) RETURN(1);
+        RETURN(0);
     }
-    WINDOW_CALLBACK(on_drop, "sy#", mime, data, (int)sz);
+    WINDOW_CALLBACK(on_drop, "sy#", mime, data, (Py_ssize_t)sz);
     request_tick_callback();
-    /* PyObject *s = PyTuple_New(count); */
-    /* if (s) { */
-    /*     for (int i = 0; i < count; i++) PyTuple_SET_ITEM(s, i, PyUnicode_FromString(strings[i])); */
-    /*     WINDOW_CALLBACK(on_drop, "O", s); */
-    /*     Py_CLEAR(s); */
-    /*     request_tick_callback(); */
-    /* } */
-    global_state.callback_os_window = NULL;
-    return 0;
+    RETURN(0);
+#undef RETURN
 }
 
+#ifdef __APPLE__
+static void
+application_quit_requested_callback(void) {
+    if (global_state.quit_request == NO_CLOSE_REQUESTED) {
+        global_state.has_pending_closes = true;
+        global_state.quit_request = CONFIRMABLE_CLOSE_REQUESTED;
+        request_tick_callback();
+    }
+}
+#endif
 // }}}
 
 void
@@ -459,6 +459,8 @@ toggle_maximized_for_os_window(OSWindow *w) {
 
 
 #ifdef __APPLE__
+static GLFWwindow *apple_preserve_common_context = NULL;
+
 static int
 filter_option(int key UNUSED, int mods, unsigned int native_key UNUSED, unsigned long flags) {
     if ((mods == GLFW_MOD_ALT) || (mods == (GLFW_MOD_ALT | GLFW_MOD_SHIFT))) {
@@ -467,8 +469,6 @@ filter_option(int key UNUSED, int mods, unsigned int native_key UNUSED, unsigned
     }
     return 0;
 }
-
-static GLFWwindow *application_quit_canary = NULL;
 
 static bool
 on_application_reopen(int has_visible_windows) {
@@ -528,8 +528,8 @@ create_os_window(PyObject UNUSED *self, PyObject *args) {
         glfwWindowHint(GLFW_COCOA_GRAPHICS_SWITCHING, true);
         glfwSetApplicationShouldHandleReopen(on_application_reopen);
         glfwSetApplicationWillFinishLaunching(cocoa_create_global_menu);
+        glfwSetApplicationQuitRequestedCallback(application_quit_requested_callback);
 #endif
-
     }
 
 #ifndef __APPLE__
@@ -549,15 +549,13 @@ create_os_window(PyObject UNUSED *self, PyObject *args) {
     // The temp window is used to get the DPI.
     glfwWindowHint(GLFW_VISIBLE, false);
     GLFWwindow *common_context = global_state.num_os_windows ? global_state.os_windows[0].handle : NULL;
-#ifdef __APPLE__
-    if (is_first_window && !application_quit_canary) {
-        application_quit_canary = glfwCreateWindow(100, 200, "quit_canary", NULL, NULL);
-        glfwSetWindowCloseCallback(application_quit_canary, application_quit_canary_close_requested);
-    }
-    if (!common_context) common_context = application_quit_canary;
-#endif
-
     GLFWwindow *temp_window = NULL;
+#ifdef __APPLE__
+    if (!apple_preserve_common_context) {
+        apple_preserve_common_context = glfwCreateWindow(100, 200, "kitty", NULL, common_context);
+    }
+    if (!common_context) common_context = apple_preserve_common_context;
+#endif
     if (!global_state.is_wayland) {
         // On Wayland windows dont get a content scale until they receive an enterEvent anyway
         // which wont happen until the event loop ticks, so using a temp window is useless.
@@ -759,21 +757,6 @@ focus_os_window(OSWindow *w, bool also_raise) {
 #endif
     }
 }
-
-#ifdef __APPLE__
-bool
-application_quit_requested() {
-    return !application_quit_canary || glfwWindowShouldClose(application_quit_canary);
-}
-
-void
-request_application_quit() {
-    if (application_quit_canary) {
-        global_state.has_pending_closes = true;
-        glfwSetWindowShouldClose(application_quit_canary, true);
-    }
-}
-#endif
 
 // Global functions {{{
 static void
@@ -979,12 +962,6 @@ wakeup_main_loop() {
     glfwPostEmptyEvent();
 }
 
-void
-mark_os_window_for_close(OSWindow* w, bool yes) {
-    global_state.has_pending_closes = true;
-    glfwSetWindowShouldClose(w->handle, yes);
-}
-
 bool
 should_os_window_be_rendered(OSWindow* w) {
     return (
@@ -992,11 +969,6 @@ should_os_window_be_rendered(OSWindow* w) {
             !glfwGetWindowAttrib(w->handle, GLFW_VISIBLE) ||
             glfwGetWindowAttrib(w->handle, GLFW_OCCLUDED)
        ) ? false : true;
-}
-
-bool
-should_os_window_close(OSWindow* w) {
-    return glfwWindowShouldClose(w->handle) ? true : false;
 }
 
 static PyObject*
@@ -1137,8 +1109,12 @@ wayland_frame_request_callback(id_type os_window_id) {
 
 void
 request_frame_render(OSWindow *w) {
-    glfwRequestWaylandFrameEvent(w->handle, w->id, wayland_frame_request_callback);
-    w->render_state = RENDER_FRAME_REQUESTED;
+    // Some Wayland compositors are too fragile to handle multiple
+    // render frame requests, see https://github.com/kovidgoyal/kitty/issues/2329
+    if (w->render_state != RENDER_FRAME_REQUESTED) {
+        glfwRequestWaylandFrameEvent(w->handle, w->id, wayland_frame_request_callback);
+        w->render_state = RENDER_FRAME_REQUESTED;
+    }
 }
 
 void
@@ -1183,6 +1159,10 @@ run_main_loop(tick_callback_fun cb, void* cb_data) {
 
 void
 stop_main_loop(void) {
+#ifdef __APPLE__
+    if (apple_preserve_common_context) glfwDestroyWindow(apple_preserve_common_context);
+    apple_preserve_common_context = NULL;
+#endif
     glfwStopMainLoop();
 }
 
