@@ -602,7 +602,9 @@ struct _GLFWlibrary
     struct {
         GLFWmonitorfun  monitor;
         GLFWjoystickfun joystick;
+        GLFWapplicationclosefun application_close;
     } callbacks;
+
 
     // This is defined in the window API's platform.h
     _GLFW_PLATFORM_LIBRARY_WINDOW_STATE;
@@ -792,9 +794,6 @@ void _glfwDebug(const char* format, ...);
 //////////////////////////////////////////////////////////////////////////
 
 bool _glfwStringInExtensionString(const char* string, const char* extensions);
-const _GLFWfbconfig* _glfwChooseFBConfig(const _GLFWfbconfig* desired,
-                                         const _GLFWfbconfig* alternatives,
-                                         unsigned int count);
 bool _glfwRefreshContextAttribs(_GLFWwindow* window,
                                     const _GLFWctxconfig* ctxconfig);
 bool _glfwIsValidContextConfig(const _GLFWctxconfig* ctxconfig);

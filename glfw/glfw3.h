@@ -195,7 +195,22 @@ extern "C" {
 
  #endif /*__APPLE__*/
 
-#elif !defined(GLFW_INCLUDE_NONE)
+#elif !defined(GLFW_INCLUDE_NONE) && \
+      !defined(__gl_h_) && \
+      !defined(__gles1_gl_h_) && \
+      !defined(__gles2_gl2_h_) && \
+      !defined(__gles2_gl3_h_) && \
+      !defined(__gles2_gl31_h_) && \
+      !defined(__gles2_gl32_h_) && \
+      !defined(__gl_glcorearb_h_) && \
+      !defined(__gl2_h_) /*legacy*/ && \
+      !defined(__gl3_h_) /*legacy*/ && \
+      !defined(__gl31_h_) /*legacy*/ && \
+      !defined(__gl32_h_) /*legacy*/ && \
+      !defined(__glcorearb_h_) /*legacy*/ && \
+      !defined(__GL_H__) /*non-standard*/ && \
+      !defined(__gltypes_h_) /*non-standard*/ && \
+      !defined(__glee_h_) /*non-standard*/
 
  #if defined(__APPLE__)
 
@@ -806,6 +821,33 @@ extern "C" {
  *  @analysis Application programmer error.  Fix the offending call.
  */
 #define GLFW_NO_WINDOW_CONTEXT      0x0001000A
+/*! @brief The reuqested feature is not provided by the platform.
+ *
+ *  The requested feature is not provided by the platform, so GLFW is unable to
+ *  implement it.  The documentation for each function notes if it could emit
+ *  this error.
+ *
+ *  @analysis Platform or platform version limitation.  The error can be ignored
+ *  unless the feature is critical to the application.
+ *
+ *  @par
+ *  A function call that emits this error has no effect other than the error and
+ *  updating any existing out parameters.
+ */
+#define GLFW_FEATURE_UNAVAILABLE    0x0001000C
+/*! @brief The requested feature is not implemented for the platform.
+ *
+ *  The requested feature has not yet been implemented in GLFW for this platform.
+ *
+ *  @analysis An incomplete implementation of GLFW for this platform, hopefully
+ *  fixed in a future release.  The error can be ignored unless the feature is
+ *  critical to the application.
+ *
+ *  @par
+ *  A function call that emits this error has no effect other than the error and
+ *  updating any existing out parameters.
+ */
+#define GLFW_FEATURE_UNIMPLEMENTED  0x0001000D
 /*! @} */
 
 /*! @addtogroup window
@@ -1319,6 +1361,22 @@ typedef void (* GLFWwindowsizefun)(GLFWwindow*,int,int);
  *  @ingroup window
  */
 typedef void (* GLFWwindowclosefun)(GLFWwindow*);
+
+/*! @brief The function pointer type for application close callbacks.
+ *
+ *  This is the function pointer type for application close callbacks.  A application
+ *  close callback function has the following signature:
+ *  @code
+ *  void function_name(int flags)
+ *  @endcode
+ *
+ *  @param[in] flags 0 for a user requested application quit, 1 if a fatal error occurred and application should quit ASAP
+ *
+ *  @sa @ref glfwSetApplicationCloseCallback
+ *
+ *  @ingroup window
+ */
+typedef void (* GLFWapplicationclosefun)(int);
 
 /*! @brief The function pointer type for window content refresh callbacks.
  *
@@ -1836,6 +1894,8 @@ GLFWAPI void glfwRemoveTimer(unsigned long long);
  *  before the application exits.  If initialization fails, there is no need to
  *  call this function, as it is called by @ref glfwInit before it returns
  *  failure.
+ *
+ *  This function has no effect if GLFW is not initialized.
  *
  *  @errors Possible errors include @ref GLFW_PLATFORM_ERROR.
  *
@@ -2834,21 +2894,21 @@ GLFWAPI void glfwSetWindowTitle(GLFWwindow* window, const char* title);
  *  @param[in] images The images to create the icon from.  This is ignored if
  *  count is zero.
  *
- *  @errors Possible errors include @ref GLFW_NOT_INITIALIZED and @ref
- *  GLFW_PLATFORM_ERROR.
+ *  @errors Possible errors include @ref GLFW_NOT_INITIALIZED, @ref
+ *  GLFW_PLATFORM_ERROR and @ref GLFW_FEATURE_UNAVAILABLE (see remarks).
  *
  *  @pointer_lifetime The specified image data is copied before this function
  *  returns.
  *
- *  @remark @macos The GLFW window has no icon, as it is not a document
- *  window, so this function does nothing.  The dock icon will be the same as
+ *  @remark @macos Regular windows do not have icons on macOS.  This function
+ *  will emit @ref GLFW_FEATURE_UNAVAILABLE.  The dock icon will be the same as
  *  the application bundle's icon.  For more information on bundles, see the
  *  [Bundle Programming Guide](https://developer.apple.com/library/mac/documentation/CoreFoundation/Conceptual/CFBundles/)
  *  in the Mac Developer Library.
  *
  *  @remark @wayland There is no existing protocol to change an icon, the
  *  window will thus inherit the one defined in the application's desktop file.
- *  This function always emits @ref GLFW_PLATFORM_ERROR.
+ *  This function will emit @ref GLFW_FEATURE_UNAVAILABLE.
  *
  *  @thread_safety This function must only be called from the main thread.
  *
@@ -2874,12 +2934,12 @@ GLFWAPI void glfwSetWindowIcon(GLFWwindow* window, int count, const GLFWimage* i
  *  @param[out] ypos Where to store the y-coordinate of the upper-left corner of
  *  the content area, or `NULL`.
  *
- *  @errors Possible errors include @ref GLFW_NOT_INITIALIZED and @ref
- *  GLFW_PLATFORM_ERROR.
+ *  @errors Possible errors include @ref GLFW_NOT_INITIALIZED, @ref
+ *  GLFW_PLATFORM_ERROR and @ref GLFW_FEATURE_UNAVAILABLE (see remarks).
  *
  *  @remark @wayland There is no way for an application to retrieve the global
- *  position of its windows, this function will always emit @ref
- *  GLFW_PLATFORM_ERROR.
+ *  position of its windows.  This function will emit @ref
+ *  GLFW_FEATURE_UNAVAILABLE.
  *
  *  @thread_safety This function must only be called from the main thread.
  *
@@ -2908,12 +2968,12 @@ GLFWAPI void glfwGetWindowPos(GLFWwindow* window, int* xpos, int* ypos);
  *  @param[in] xpos The x-coordinate of the upper-left corner of the content area.
  *  @param[in] ypos The y-coordinate of the upper-left corner of the content area.
  *
- *  @errors Possible errors include @ref GLFW_NOT_INITIALIZED and @ref
- *  GLFW_PLATFORM_ERROR.
+ *  @errors Possible errors include @ref GLFW_NOT_INITIALIZED, @ref
+ *  GLFW_PLATFORM_ERROR and @ref GLFW_FEATURE_UNAVAILABLE (see remarks).
  *
  *  @remark @wayland There is no way for an application to set the global
- *  position of its windows, this function will always emit @ref
- *  GLFW_PLATFORM_ERROR.
+ *  position of its windows.  This function will emit @ref
+ *  GLFW_FEATURE_UNAVAILABLE.
  *
  *  @thread_safety This function must only be called from the main thread.
  *
@@ -3291,8 +3351,11 @@ GLFWAPI float glfwGetWindowOpacity(GLFWwindow* window);
  *  @param[in] window The window to set the opacity for.
  *  @param[in] opacity The desired opacity of the specified window.
  *
- *  @errors Possible errors include @ref GLFW_NOT_INITIALIZED and @ref
- *  GLFW_PLATFORM_ERROR.
+ *  @errors Possible errors include @ref GLFW_NOT_INITIALIZED, @ref
+ *  GLFW_PLATFORM_ERROR and @ref GLFW_FEATURE_UNAVAILABLE (see remarks).
+ *
+ *  @remark @wayland There is no way to set an opacity factor for a window.
+ *  This function will emit @ref GLFW_FEATURE_UNAVAILABLE.
  *
  *  @thread_safety This function must only be called from the main thread.
  *
@@ -3459,11 +3522,11 @@ GLFWAPI void glfwHideWindow(GLFWwindow* window);
  *
  *  @param[in] window The window to give input focus.
  *
- *  @errors Possible errors include @ref GLFW_NOT_INITIALIZED and @ref
- *  GLFW_PLATFORM_ERROR.
+ *  @errors Possible errors include @ref GLFW_NOT_INITIALIZED, @ref
+ *  GLFW_PLATFORM_ERROR and @ref GLFW_FEATURE_UNAVAILABLE (see remarks).
  *
- *  @remark @wayland It is not possible for an application to bring its windows
- *  to front, this function will always emit @ref GLFW_PLATFORM_ERROR.
+ *  @remark @wayland It is not possible for an application to set the input
+ *  focus.  This function will emit @ref GLFW_FEATURE_UNAVAILABLE.
  *
  *  @thread_safety This function must only be called from the main thread.
  *
@@ -3828,6 +3891,7 @@ GLFWAPI GLFWwindowsizefun glfwSetWindowSizeCallback(GLFWwindow* window, GLFWwind
  *  @ingroup window
  */
 GLFWAPI GLFWwindowclosefun glfwSetWindowCloseCallback(GLFWwindow* window, GLFWwindowclosefun callback);
+GLFWAPI GLFWapplicationclosefun glfwSetApplicationCloseCallback(GLFWapplicationclosefun callback);
 
 /*! @brief Sets the refresh callback for the specified window.
  *
@@ -4135,10 +4199,10 @@ GLFWAPI int glfwGetInputMode(GLFWwindow* window, int mode);
  *  GLFW_MOD_CAPS_LOCK bit set when the event was generated with Caps Lock on,
  *  and the @ref GLFW_MOD_NUM_LOCK bit when Num Lock was on.
  *
- *  If the mode is `GLFW_RAW_MOUSE_MOTION`, the value must be either `GLFW_TRUE`
+ *  If the mode is `GLFW_RAW_MOUSE_MOTION`, the value must be either `true`
  *  to enable raw (unscaled and unaccelerated) mouse motion when the cursor is
  *  disabled, or `false` to disable it.  If raw motion is not supported,
- *  attempting to set this will emit @ref GLFW_PLATFORM_ERROR.  Call @ref
+ *  attempting to set this will emit @ref GLFW_FEATURE_UNAVAILABLE.  Call @ref
  *  glfwRawMouseMotionSupported to check for support.
  *
  *  @param[in] window The window whose input mode to set.
@@ -4148,7 +4212,8 @@ GLFWAPI int glfwGetInputMode(GLFWwindow* window, int mode);
  *  @param[in] value The new value of the specified input mode.
  *
  *  @errors Possible errors include @ref GLFW_NOT_INITIALIZED, @ref
- *  GLFW_INVALID_ENUM and @ref GLFW_PLATFORM_ERROR.
+ *  GLFW_INVALID_ENUM, @ref GLFW_PLATFORM_ERROR and @ref
+ *  GLFW_FEATURE_UNAVAILABLE (see above).
  *
  *  @thread_safety This function must only be called from the main thread.
  *

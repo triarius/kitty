@@ -167,7 +167,7 @@ typedef struct {
     monotonic_t cursor_blink_zero_time, last_mouse_activity_at;
     double mouse_x, mouse_y;
     double logical_dpi_x, logical_dpi_y, font_sz_in_pts;
-    bool mouse_button_pressed[20];
+    bool mouse_button_pressed[32];
     PyObject *window_title;
     bool is_key_pressed[MAX_KEY_COUNT];
     bool viewport_size_dirty, viewport_updated_at_least_once;
@@ -277,3 +277,4 @@ void stop_main_loop(void);
 void os_window_update_size_increments(OSWindow *window);
 void set_os_window_title_from_window(Window *w, OSWindow *os_window);
 void update_os_window_title(OSWindow *os_window);
+void fake_scroll(Window *w, int amount, bool upwards);

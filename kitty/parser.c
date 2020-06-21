@@ -652,6 +652,8 @@ dispatch_csi(Screen *screen, PyObject DUMP_UNUSED *dump_callback) {
         case ICH:
             NO_MODIFIERS(end_modifier, ' ', "Shift left escape code not implemented");
             CALL_CSI_HANDLER1(screen_insert_characters, 1);
+        case REP:
+            CALL_CSI_HANDLER1(screen_repeat_character, 1);
         case CUU:
             NO_MODIFIERS(end_modifier, ' ', "Shift right escape code not implemented");
             CALL_CSI_HANDLER1(screen_cursor_up2, 1);
@@ -819,12 +821,14 @@ dispatch_dcs(Screen *screen, PyObject DUMP_UNUSED *dump_callback) {
             }
             break;
         case PENDING_MODE_CHAR:
-            if (screen->parser_buf_pos > 2 && (screen->parser_buf[1] == '1' || screen->parser_buf[2] == '2') && screen->parser_buf[2] == 's') {
+            if (screen->parser_buf_pos > 2 && (screen->parser_buf[1] == '1' || screen->parser_buf[1] == '2') && screen->parser_buf[2] == 's') {
                 if (screen->parser_buf[1] == '1') {
                     screen->pending_mode.activated_at = monotonic();
                     REPORT_COMMAND(screen_start_pending_mode);
                 } else {
-                    // ignore stop without matching start
+                    // ignore stop without matching start, see _queue_pending_bytes()
+                    // for how stop is detected while in pending mode.
+                    REPORT_ERROR("Pending mode stop command issued while not in pending mode");
                     REPORT_COMMAND(screen_stop_pending_mode);
                 }
             } else {

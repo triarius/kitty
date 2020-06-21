@@ -86,6 +86,7 @@ typedef struct {
     struct {
         IterationData selection, url;
         unsigned int cursor_x, cursor_y, scrolled_by;
+        index_type lines, columns;
     } last_rendered;
     bool use_latin1, is_dirty, scroll_changed, reload_all_gpu_data;
     Cursor *cursor;
@@ -165,6 +166,7 @@ void screen_cursor_up1(Screen *self, unsigned int count/*=1*/);
 void screen_cursor_to_line(Screen *screen, unsigned int line);
 void screen_insert_lines(Screen *self, unsigned int count/*=1*/);
 void screen_delete_lines(Screen *self, unsigned int count/*=1*/);
+void screen_repeat_character(Screen *self, unsigned int count);
 void screen_delete_characters(Screen *self, unsigned int count);
 void screen_erase_characters(Screen *self, unsigned int count);
 void screen_set_margins(Screen *self, unsigned int top, unsigned int bottom);

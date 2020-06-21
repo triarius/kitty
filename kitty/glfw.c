@@ -227,10 +227,38 @@ refresh_callback(GLFWwindow *w) {
 
 static int mods_at_last_key_or_button_event = 0;
 
+static inline int
+key_to_modifier(int key) {
+    switch(key) {
+        case GLFW_KEY_LEFT_SHIFT:
+        case GLFW_KEY_RIGHT_SHIFT:
+            return GLFW_MOD_SHIFT;
+        case GLFW_KEY_LEFT_CONTROL:
+        case GLFW_KEY_RIGHT_CONTROL:
+            return GLFW_MOD_CONTROL;
+        case GLFW_KEY_LEFT_ALT:
+        case GLFW_KEY_RIGHT_ALT:
+            return GLFW_MOD_ALT;
+        case GLFW_KEY_LEFT_SUPER:
+        case GLFW_KEY_RIGHT_SUPER:
+            return GLFW_MOD_SUPER;
+        default:
+            return -1;
+    }
+}
+
 static void
 key_callback(GLFWwindow *w, GLFWkeyevent *ev) {
     if (!set_callback_window(w)) return;
     mods_at_last_key_or_button_event = ev->mods;
+    int key_modifier = key_to_modifier(ev->key);
+    if (key_modifier != -1) {
+        if (ev->action == GLFW_RELEASE) {
+            mods_at_last_key_or_button_event &= ~key_modifier;
+        } else {
+            mods_at_last_key_or_button_event |= key_modifier;
+        }
+    }
     global_state.callback_os_window->cursor_blink_zero_time = monotonic();
     if (ev->key >= 0 && ev->key <= GLFW_KEY_LAST) {
         global_state.callback_os_window->is_key_pressed[ev->key] = ev->action == GLFW_RELEASE ? false : true;
@@ -332,16 +360,19 @@ drop_callback(GLFWwindow *w, const char *mime, const char *data, size_t sz) {
 #undef RETURN
 }
 
-#ifdef __APPLE__
 static void
-application_quit_requested_callback(void) {
-    if (global_state.quit_request == NO_CLOSE_REQUESTED) {
-        global_state.has_pending_closes = true;
-        global_state.quit_request = CONFIRMABLE_CLOSE_REQUESTED;
+application_close_requested_callback(int flags) {
+    if (flags) {
+        global_state.quit_request = IMPERATIVE_CLOSE_REQUESTED;
         request_tick_callback();
+    } else {
+        if (global_state.quit_request == NO_CLOSE_REQUESTED) {
+            global_state.has_pending_closes = true;
+            global_state.quit_request = CONFIRMABLE_CLOSE_REQUESTED;
+            request_tick_callback();
+        }
     }
 }
-#endif
 // }}}
 
 void
@@ -523,12 +554,12 @@ create_os_window(PyObject UNUSED *self, PyObject *args) {
         glfwWindowHint(GLFW_DEPTH_BITS, 0);
         glfwWindowHint(GLFW_STENCIL_BITS, 0);
         if (OPT(hide_window_decorations) & 1) glfwWindowHint(GLFW_DECORATED, false);
+        glfwSetApplicationCloseCallback(application_close_requested_callback);
 #ifdef __APPLE__
         cocoa_set_activation_policy(OPT(macos_hide_from_tasks));
         glfwWindowHint(GLFW_COCOA_GRAPHICS_SWITCHING, true);
         glfwSetApplicationShouldHandleReopen(on_application_reopen);
         glfwSetApplicationWillFinishLaunching(cocoa_create_global_menu);
-        glfwSetApplicationQuitRequestedCallback(application_quit_requested_callback);
 #endif
     }
 

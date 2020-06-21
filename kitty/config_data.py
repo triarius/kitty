@@ -304,6 +304,9 @@ or by defining shortcuts for it in kitty.conf, for example::
     map alt+2 disable_ligatures_in all never
     map alt+3 disable_ligatures_in tab cursor
 
+Note that this refers to programming ligatures, typically implemented using the
+:code:`calt` OpenType feature. For disabling general ligatures, use the
+:opt:`font_features` setting.
 '''))
 
 o('font_features', 'none', long_text=_('''
@@ -795,6 +798,8 @@ def tab_separator(x: str) -> str:
     for q in '\'"':
         if x.startswith(q) and x.endswith(q):
             x = x[1:-1]
+            if not x:
+                return ''
             break
     if not x.strip():
         x = ('\xa0' * len(x)) if x else default_tab_separator
