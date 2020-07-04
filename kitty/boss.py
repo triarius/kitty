@@ -382,6 +382,8 @@ class Boss:
                 args.directory = os.path.join(data['cwd'], args.directory)
             for session in create_sessions(opts, args, respect_cwd=True):
                 os_window_id = self.add_os_window(session, wclass=args.cls, wname=args.name, opts_for_size=opts, startup_id=startup_id)
+                if opts.background_opacity != self.opts.background_opacity:
+                    self._set_os_window_background_opacity(os_window_id, opts.background_opacity)
                 if data.get('notify_on_os_window_death'):
                     self.os_window_death_actions[os_window_id] = partial(self.notify_on_os_window_death, data['notify_on_os_window_death'])
         else:
@@ -851,6 +853,9 @@ class Boss:
                             add_history='history' in type_of_input,
                             add_wrap_markers='screen' in type_of_input
                     ).encode('utf-8')
+                elif type_of_input == 'selection':
+                    sel = self.data_for_at(which='@selection', window=w)
+                    data = sel.encode('utf-8') if sel else None
                 elif type_of_input is None:
                     data = None
                 else:
@@ -858,9 +863,16 @@ class Boss:
             else:
                 data = input_data if isinstance(input_data, bytes) else input_data.encode('utf-8')
             copts = common_opts_as_dict(self.opts)
+            final_args: List[str] = []
+            for x in args:
+                if x == '@selection':
+                    sel = self.data_for_at(which='@selection', window=w)
+                    if sel:
+                        x = sel
+                final_args.append(x)
             overlay_window = tab.new_special_window(
                 SpecialWindow(
-                    [kitty_exe(), '+runpy', 'from kittens.runner import main; main()'] + args,
+                    [kitty_exe(), '+runpy', 'from kittens.runner import main; main()'] + final_args,
                     stdin=data,
                     env={
                         'KITTY_COMMON_OPTS': json.dumps(copts),

@@ -4,7 +4,33 @@ Changelog
 |kitty| is a feature full, cross-platform, *fast*, GPU based terminal emulator.
 To update |kitty|, :doc:`follow the instructions <binary>`.
 
-0.18.1 [future]
+0.18.2 [future]
+--------------------
+
+- X11: Improve handling of multiple keyboards. Now pressing a modifier key in
+  one keyboard and a normal key in another works (:iss:`2362`). Don't rebuild
+  keymaps on new keyboard events that only change geometry (:iss:`2787`).
+  Better handling of multiple keyboards with incompatible layouts (:iss:`2726`)
+
+- macOS: Fix the LC_TYPE env var being set to UTF-8 on systems in which the
+  language and country code do not form a valid locale (:iss:`1233`)
+
+- Allow passing the current selection to kittens (:iss:`2796`)
+
+- Allow setting the :opt:`background_opacity` of new OS windows created via
+  :option:`kitty --single-instance` using the :option:`kitty --override` command line
+  argument (:iss:`2806`)
+
+- Wayland: Fix a crash when using animated mouse cursors (:iss:`2810`)
+
+- Fix the CSI J (Erase in display ED) escape code not removing line continued
+  markers (:iss:`2809`)
+
+- hints kitten: In linenumber mode expand paths that starts with ~
+  (:iss:`2822`)
+
+
+0.18.1 [2020-06-23]
 --------------------
 
 - macOS: Fix for diff kitten not working with python 3.8 (:iss:`2780`)

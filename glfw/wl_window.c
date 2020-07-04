@@ -68,12 +68,14 @@ setCursorImage(_GLFWwindow* window)
             if (newCursor != NULL) {
                 cursorWayland->cursor = newCursor;
                 cursorWayland->scale = scale;
+                cursorWayland->currentImage = 0;
             } else {
                 _glfwInputError(GLFW_PLATFORM_ERROR, "Wayland: late cursor load failed; proceeding with existing cursor");
             }
         }
-        if (!cursorWayland->cursor)
+        if (!cursorWayland->cursor || !cursorWayland->cursor->image_count)
             return;
+        if (cursorWayland->currentImage >= cursorWayland->cursor->image_count) cursorWayland->currentImage = 0;
         image = cursorWayland->cursor->images[cursorWayland->currentImage];
         buffer = wl_cursor_image_get_buffer(image);
         if (image->delay && window->cursor) {
@@ -764,14 +766,18 @@ animateCursorImage(id_type timer_id UNUSED, void *data UNUSED) {
 
 static void
 abortOnFatalError(int last_error) {
-    _glfwInputError(GLFW_PLATFORM_ERROR, "Wayland: fatal display error: %s", strerror(last_error));
-    if (_glfw.callbacks.application_close) _glfw.callbacks.application_close(1);
-    else {
-        _GLFWwindow* window = _glfw.windowListHead;
-        while (window)
-        {
-            _glfwInputWindowCloseRequest(window);
-            window = window->next;
+    static bool abort_called = false;
+    if (!abort_called) {
+        abort_called = true;
+        _glfwInputError(GLFW_PLATFORM_ERROR, "Wayland: fatal display error: %s", strerror(last_error));
+        if (_glfw.callbacks.application_close) _glfw.callbacks.application_close(1);
+        else {
+            _GLFWwindow* window = _glfw.windowListHead;
+            while (window)
+            {
+                _glfwInputWindowCloseRequest(window);
+                window = window->next;
+            }
         }
     }
     // ensure the tick callback is called
@@ -2006,6 +2012,24 @@ const char* _glfwPlatformGetPrimarySelectionString(void)
         }
     }
     return NULL;
+}
+
+EGLenum _glfwPlatformGetEGLPlatform(EGLint** attribs UNUSED)
+{
+    if (_glfw.egl.EXT_platform_base && _glfw.egl.EXT_platform_wayland)
+        return EGL_PLATFORM_WAYLAND_EXT;
+    else
+        return 0;
+}
+
+EGLNativeDisplayType _glfwPlatformGetEGLNativeDisplay(void)
+{
+    return _glfw.wl.display;
+}
+
+EGLNativeWindowType _glfwPlatformGetEGLNativeWindow(_GLFWwindow* window)
+{
+    return window->wl.native;
 }
 
 void _glfwPlatformGetRequiredInstanceExtensions(char** extensions)
