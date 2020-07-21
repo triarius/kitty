@@ -195,7 +195,7 @@ class Boss:
     ) -> int:
         if os_window_id is None:
             opts_for_size = opts_for_size or getattr(startup_session, 'os_window_size', None) or self.opts
-            wclass = wclass or self.args.cls or appname
+            wclass = wclass or getattr(startup_session, 'os_window_class', None) or self.args.cls or appname
             with startup_notification_handler(do_notify=startup_id is not None, startup_id=startup_id) as pre_show_callback:
                 os_window_id = create_os_window(
                         initial_window_size_func(opts_for_size, self.cached_values),
@@ -444,8 +444,34 @@ class Boss:
     def close_tab(self, tab: Optional[Tab] = None) -> None:
         tab = tab or self.active_tab
         if tab:
-            for window in tab:
-                self.close_window(window)
+            self.confirm_tab_close(tab)
+
+    def confirm_tab_close(self, tab: Tab) -> None:
+        windows = tuple(tab)
+        needs_confirmation = self.opts.confirm_os_window_close > 0 and len(windows) >= self.opts.confirm_os_window_close
+        if not needs_confirmation:
+            self.close_tab_no_confirm(tab)
+            return
+        self._run_kitten('ask', ['--type=yesno', '--message', _(
+            'Are you sure you want to close this tab, it has {}'
+            ' windows running?').format(len(windows))],
+            window=tab.active_window,
+            custom_callback=partial(self.handle_close_tab_confirmation, tab.id)
+        )
+
+    def handle_close_tab_confirmation(self, tab_id: int, data: Dict[str, Any], *a: Any) -> None:
+        if data['response'] != 'y':
+            return
+        for tab in self.all_tabs:
+            if tab.id == tab_id:
+                break
+        else:
+            return
+        self.close_tab_no_confirm(tab)
+
+    def close_tab_no_confirm(self, tab: Tab) -> None:
+        for window in tab:
+            self.close_window(window)
 
     def toggle_fullscreen(self) -> None:
         toggle_fullscreen()

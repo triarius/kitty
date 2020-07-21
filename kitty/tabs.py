@@ -25,7 +25,7 @@ from .layout.base import Layout, Rect
 from .layout.interface import create_layout_object_for, evict_cached_layouts
 from .options_stub import Options
 from .tab_bar import TabBar, TabBarData
-from .typing import SessionTab, SessionType, TypedDict
+from .typing import EdgeLiteral, SessionTab, SessionType, TypedDict
 from .utils import log_error, resolved_shell
 from .window import Watchers, Window, WindowDict
 from .window_list import WindowList
@@ -410,15 +410,37 @@ class Tab:  # {{{
 
     prev_window = previous_window
 
-    def neighboring_window(self, which: str) -> None:
-        neighbors = self.current_layout.neighbors(self.windows)
-        candidates = cast(Optional[Tuple[int, ...]], neighbors.get(which))
-        if candidates:
-            self.windows.set_active_group(candidates[0])
+    def most_recent_group(self, groups: Sequence[int]) -> Optional[int]:
+        groups_set = frozenset(groups)
 
-    def move_window(self, delta: Union[str, int] = 1) -> None:
-        if self.current_layout.move_window(self.windows, delta):
-            self.relayout()
+        for window_id in reversed(self.windows.active_window_history):
+            group = self.windows.group_for_window(window_id)
+            if group and group.id in groups_set:
+                return group.id
+
+        if groups:
+            return groups[0]
+
+    def neighboring_group_id(self, which: EdgeLiteral) -> Optional[int]:
+        neighbors = self.current_layout.neighbors(self.windows)
+        candidates = neighbors.get(which)
+        if candidates:
+            return self.most_recent_group(candidates)
+
+    def neighboring_window(self, which: EdgeLiteral) -> None:
+        neighbor = self.neighboring_group_id(which)
+        if neighbor:
+            self.windows.set_active_group(neighbor)
+
+    def move_window(self, delta: Union[EdgeLiteral, int] = 1) -> None:
+        if isinstance(delta, int):
+            if self.current_layout.move_window(self.windows, delta):
+                self.relayout()
+        elif isinstance(delta, str):
+            neighbor = self.neighboring_group_id(delta)
+            if neighbor:
+                if self.current_layout.move_window_to_group(self.windows, neighbor):
+                    self.relayout()
 
     def move_window_to_top(self) -> None:
         n = self.windows.num_groups

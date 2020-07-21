@@ -123,7 +123,7 @@ new(PyTypeObject *type, PyObject *args, PyObject UNUSED *kwds) {
         ) {
             Py_CLEAR(self); return NULL;
         }
-        self->alt_tabstops = self->main_tabstops + self->columns * sizeof(bool);
+        self->alt_tabstops = self->main_tabstops + self->columns;
         self->tabstops = self->main_tabstops;
         init_tabstops(self->main_tabstops, self->columns);
         init_tabstops(self->alt_tabstops, self->columns);
@@ -236,7 +236,7 @@ screen_resize(Screen *self, unsigned int lines, unsigned int columns) {
     PyMem_Free(self->main_tabstops);
     self->main_tabstops = PyMem_Calloc(2*self->columns, sizeof(bool));
     if (self->main_tabstops == NULL) { PyErr_NoMemory(); return false; }
-    self->alt_tabstops = self->main_tabstops + self->columns * sizeof(bool);
+    self->alt_tabstops = self->main_tabstops + self->columns;
     self->tabstops = self->main_tabstops;
     init_tabstops(self->main_tabstops, self->columns);
     init_tabstops(self->alt_tabstops, self->columns);
@@ -1576,7 +1576,7 @@ screen_request_capabilities(Screen *self, char c, PyObject *q) {
 // Rendering {{{
 static inline void
 update_line_data(Line *line, unsigned int dest_y, uint8_t *data) {
-    size_t base = dest_y * line->xnum * sizeof(GPUCell);
+    size_t base = sizeof(GPUCell) * dest_y * line->xnum;
     memcpy(data + base, line->gpu_cells, line->xnum * sizeof(GPUCell));
 }
 
